@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# Environment variables
+.env
+
+# Model weights and cache
+weights/
+.cache/
+*.pth
+*.pt
+*.safetensors
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
