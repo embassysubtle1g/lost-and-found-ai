@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.api.v1.images import router as images_router
 
 app = FastAPI(
     title="Lost and Found AI Service",
@@ -20,3 +21,9 @@ def health():
     return {
         "status": "healthy",
     }
+
+
+app.include_router(
+    images_router,
+    prefix="/api/v1",
+)
