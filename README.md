@@ -1,24 +1,10 @@
-# Lost and Found AI
+# 拾獲物招領系統
 
-AI image similarity service for a lost-and-found system.
+| 目錄 | 用途 |
+| --- | --- |
+| [backend/](backend/README.md) | 主系統 FastAPI 後端，負責物品、權限、圖片儲存及搜尋 |
+| [frontend/](frontend/README.md) | 團隊 React 前端的整合位置 |
+| [services/lost-and-found-ai/](services/lost-and-found-ai/使用說明.md) | 獨立的 DINOv2 圖片特徵擷取服務 |
+| [docs/](docs/integration.md) | 服務串接方式 |
 
-## Technology
-
-- Python
-- FastAPI
-- PyTorch
-- DINOv2
-
-## Development
-
-Install dependencies:
-
-    pip install -r requirements.txt
-
-Start the service:
-
-    uvicorn app.main:app --host 0.0.0.0 --port 8080
-
-API documentation:
-
-    /docs
+主系統後端在 `backend/` 啟動，預設埠為 `8000`。AI 服務在 `services/lost-and-found-ai/` 啟動，預設埠為 `8080`。安裝與啟動指令請參考各自的使用說明。
