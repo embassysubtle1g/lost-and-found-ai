@@ -1,5 +1,5 @@
 from alembic import context
-from app.db import engine
+from app.core.db import engine
 
 with engine.connect() as connection:
     context.configure(connection=connection)

@@ -5,11 +5,12 @@ from datetime import date
 import httpx
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
-from pydantic import BaseModel, ConfigDict, Field
 
-from .db import engine, one, query, rows
-from .media import MODEL, VERSION, bucket, embedding, get_photo, storage, validate_image
-from .security import current_staff
+from ..core.db import engine, one, query, rows
+from ..core.security import current_staff
+from ..models.items import images, owned
+from ..schemas.items import ItemData
+from ..services.media import MODEL, VERSION, bucket, embedding, get_photo, storage, validate_image
 
 router = APIRouter(tags=["items"])
 PUBLIC_FIELDS = """
@@ -31,40 +32,12 @@ FILTERS = """
 """
 
 
-class ItemData(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-    name: str = Field(min_length=1, max_length=120)
-    category: str = Field(min_length=1, max_length=80)
-    found_date: date
-    found_location: str = Field(min_length=1, max_length=240)
-    private_note: str = Field(default="", max_length=2000)
-
-
 def public_filters(keyword, category, location, organization, since, until):
     if since and until and since > until:
         raise HTTPException(422, "起始日期不可晚於結束日期")
     return dict(keyword=keyword, keyword_pattern=f"%{keyword}%", category=category,
                 location=location, location_pattern=f"%{location}%",
                 organization=organization, since=since, until=until)
-
-
-def owned(connection, item_id, staff, lock=False):
-    item = one(connection, """
-        SELECT * FROM items WHERE id = :id AND organization_id = :org
-    """ + (" FOR UPDATE" if lock else ""), id=item_id, org=staff["organization_id"])
-    if item is None:
-        raise HTTPException(404, "找不到物品")
-    return dict(item)
-
-
-def images(connection, item_id, private=False):
-    fields = "id, is_cover, media_type"
-    if private:
-        fields += ", size_bytes, state, error, model, model_version"
-    return rows(connection, f"""
-        SELECT {fields} FROM item_images WHERE item_id = :id AND removed_at IS NULL
-        ORDER BY is_cover DESC, id
-    """, id=item_id)
 
 
 @router.get("/public/organizations")

@@ -12,7 +12,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
 
-from .db import engine, one, query
+from ..core.db import engine, one, query
 
 LIMIT = 8 * 1024 * 1024
 MEDIA_TYPES = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}

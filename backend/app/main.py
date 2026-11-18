@@ -5,9 +5,9 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import auth, items
-from .db import ROOT
-from .media import ensure_bucket, run_worker
+from .api import auth, items
+from .core.db import ROOT
+from .services.media import ensure_bucket, run_worker
 
 DEMO = ROOT / "demo"
 

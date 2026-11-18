@@ -1,7 +1,7 @@
 import getpass
 
-from app.db import engine, one, query
-from app.security import password_hash
+from app.core.db import engine, one, query
+from app.core.security import password_hash
 
 
 def main():

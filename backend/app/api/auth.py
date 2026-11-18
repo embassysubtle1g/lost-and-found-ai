@@ -1,29 +1,13 @@
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, Field
 
-from .db import engine, one, query
-from .security import current_staff, password_hash, token_hash, verify_password
+from ..core.db import engine, one, query
+from ..core.security import current_staff, password_hash, token_hash, verify_password
+from ..schemas.auth import Login, Organization, PasswordChange
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 DUMMY_PASSWORD = password_hash(secrets.token_hex(24))
-
-
-class Login(BaseModel):
-    username: str = Field(min_length=1, max_length=100)
-    password: str = Field(min_length=1, max_length=160)
-
-
-class PasswordChange(BaseModel):
-    current_password: str = Field(min_length=1, max_length=160)
-    new_password: str = Field(min_length=10, max_length=160)
-
-
-class Organization(BaseModel):
-    name: str = Field(min_length=1, max_length=120)
-    address: str = Field(min_length=1, max_length=240)
-    phone: str = Field(min_length=1, max_length=50)
 
 
 @router.post("/login")
