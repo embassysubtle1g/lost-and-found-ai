@@ -59,12 +59,36 @@ class SearchContractTests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 503)
 
-    def test_staff_write_requires_login(self):
-        response = self.client.post("/api/v1/staff/items", json={
-            "name": "錢包", "category": "證件錢包", "found_date": "2026-11-01",
-            "found_location": "一樓", "found_region": "屏東市",
-        })
-        self.assertEqual(response.status_code, 401)
+    def test_staff_write_works_without_token(self):
+        from app.core.organization import organization_context
+
+        app.dependency_overrides[organization_context] = lambda: {"organization_id": 7}
+        try:
+            with patch.object(items.engine, "begin"), patch.object(
+                items, "one", return_value={"id": 1, "name": "錢包"}
+            ) as insert:
+                response = self.client.post("/api/v1/staff/items", json={
+                    "name": "錢包", "category": "證件錢包", "found_date": "2026-11-01",
+                    "found_location": "一樓", "found_region": "屏東市",
+                })
+            self.assertEqual(response.status_code, 201, response.text)
+            self.assertEqual(insert.call_args.kwargs["org"], 7)
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_return_without_account_records_time(self):
+        from app.core.organization import organization_context
+
+        app.dependency_overrides[organization_context] = lambda: {"organization_id": 7}
+        try:
+            with patch.object(items.engine, "begin"), \
+                 patch.object(items, "owned", return_value={"status": "AVAILABLE"}), \
+                 patch.object(items, "one", return_value={"id": 1, "status": "RETURNED"}) as update:
+                response = self.client.post("/api/v1/staff/items/1/return")
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertIn("returned_at = now(), returned_by = NULL", update.call_args.args[1])
+        finally:
+            app.dependency_overrides.clear()
 
     def test_existing_item_payload_still_accepts_missing_region(self):
         from app.schemas.items import ItemData

@@ -1,26 +1,35 @@
 import unittest
 from pathlib import Path
 
-from app.main import DEMO, app
+from app.main import FRONTEND, app, frontend
 
 
 class ApiLayoutTests(unittest.TestCase):
-    def test_main_keeps_public_and_staff_api_registered(self):
+    def test_main_keeps_public_and_management_api_registered(self):
         paths = app.openapi()["paths"]
         expected = {
             "/health": "get",
             "/api/v1/public/items": "get",
             "/api/v1/public/search": "post",
-            "/api/v1/auth/login": "post",
+            "/api/v1/staff/organizations": "post",
             "/api/v1/staff/items": "post",
             "/api/v1/staff/items/{item_id}/images": "post",
             "/api/v1/staff/items/{item_id}/return": "post",
         }
         for path, method in expected.items():
             with self.subTest(path=path, method=method):
-                self.assertIn(method, paths.get(path, {}))
+                operation = paths.get(path, {}).get(method, {})
+                self.assertTrue(operation)
+                self.assertFalse(operation.get("security"))
+        self.assertFalse(any("/auth/" in path for path in paths))
 
-    def test_demo_assets_resolve_from_backend(self):
+    def test_only_react_frontend_is_served(self):
         backend = Path(__file__).resolve().parents[1]
-        self.assertEqual(DEMO, backend / "app" / "api" / "demo")
-        self.assertTrue((DEMO / "index.html").is_file())
+        self.assertEqual(FRONTEND, backend.parent / "frontend" / "dist")
+        response = frontend()
+        if (FRONTEND / "index.html").is_file():
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(Path(response.path), FRONTEND / "index.html")
+        else:
+            self.assertEqual(response.status_code, 503)
+            self.assertIn("請先建置新版前端", response.body.decode())

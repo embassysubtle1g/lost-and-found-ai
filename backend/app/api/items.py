@@ -7,7 +7,8 @@ from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 
 from ..core.db import engine, one, query, rows
-from ..core.security import current_staff
+from ..core.organization import organization_context
+from ..schemas.organizations import OrganizationData
 from ..models.items import images, owned
 from ..schemas.items import ItemData
 from ..services.media import MODEL, VERSION, bucket, embedding, get_photo, storage, validate_image
@@ -46,6 +47,37 @@ def public_filters(keyword, category, location, organization, since, until, lost
 def organizations():
     with engine.connect() as connection:
         return rows(connection, "SELECT id, name, address, phone FROM organizations ORDER BY name")
+
+
+
+@router.post("/staff/organizations", status_code=201)
+def create_organization(data: OrganizationData):
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        with engine.begin() as connection:
+            organization = one(connection, """
+                INSERT INTO organizations(name, address, phone) VALUES (:name, :address, :phone)
+                RETURNING id, name, address, phone
+            """, **data.model_dump())
+    except IntegrityError as exc:
+        raise HTTPException(409, "機構名稱已存在") from exc
+    return dict(organization)
+
+
+@router.put("/staff/organization")
+def update_organization(data: OrganizationData, organization=Depends(organization_context)):
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        with engine.begin() as connection:
+            result = one(connection, """
+                UPDATE organizations SET name = :name, address = :address, phone = :phone
+                WHERE id = :id RETURNING id, name, address, phone
+            """, id=organization["organization_id"], **data.model_dump())
+    except IntegrityError as exc:
+        raise HTTPException(409, "機構名稱已存在") from exc
+    return dict(result)
 
 
 @router.get("/public/items")
@@ -100,7 +132,7 @@ def search(file: UploadFile = File(), keyword: str = Form("", max_length=120), c
 
 @router.get("/staff/items")
 def staff_items(page: int = Query(1, ge=1, le=100000), limit: int = Query(20, ge=1, le=50),
-                staff=Depends(current_staff)):
+                staff=Depends(organization_context)):
     with engine.connect() as connection:
         result = rows(connection, """
             SELECT id, reference, name, category, found_date, found_location, found_region, status, returned_at
@@ -110,7 +142,7 @@ def staff_items(page: int = Query(1, ge=1, le=100000), limit: int = Query(20, ge
 
 
 @router.post("/staff/items", status_code=201)
-def create_item(data: ItemData, staff=Depends(current_staff)):
+def create_item(data: ItemData, staff=Depends(organization_context)):
     with engine.begin() as connection:
         item = one(connection, """
             INSERT INTO items(reference, organization_id, name, category, found_date,
@@ -122,13 +154,13 @@ def create_item(data: ItemData, staff=Depends(current_staff)):
 
 
 @router.get("/staff/items/{item_id}")
-def staff_item(item_id: int, staff=Depends(current_staff)):
+def staff_item(item_id: int, staff=Depends(organization_context)):
     with engine.connect() as connection:
         return {**owned(connection, item_id, staff), "images": images(connection, item_id, True)}
 
 
 @router.put("/staff/items/{item_id}")
-def edit_item(item_id: int, data: ItemData, staff=Depends(current_staff)):
+def edit_item(item_id: int, data: ItemData, staff=Depends(organization_context)):
     with engine.begin() as connection:
         owned(connection, item_id, staff, lock=True)
         item = one(connection, """
@@ -140,7 +172,7 @@ def edit_item(item_id: int, data: ItemData, staff=Depends(current_staff)):
 
 
 @router.post("/staff/items/{item_id}/return")
-def return_item(item_id: int, staff=Depends(current_staff)):
+def return_item(item_id: int, staff=Depends(organization_context)):
     with engine.begin() as connection:
         item = owned(connection, item_id, staff, lock=True)
         if item["status"] == "RETURNED":
@@ -148,13 +180,13 @@ def return_item(item_id: int, staff=Depends(current_staff)):
         if item["status"] != "AVAILABLE":
             raise HTTPException(409, "只有待認領物品可以登記歸還")
         return dict(one(connection, """
-            UPDATE items SET status = 'RETURNED', returned_at = now(), returned_by = :staff
+            UPDATE items SET status = 'RETURNED', returned_at = now(), returned_by = NULL
             WHERE id = :id RETURNING *
-        """, id=item_id, staff=staff["id"]))
+        """, id=item_id))
 
 
 @router.post("/staff/items/{item_id}/withdraw", status_code=204)
-def withdraw_item(item_id: int, staff=Depends(current_staff)):
+def withdraw_item(item_id: int, staff=Depends(organization_context)):
     with engine.begin() as connection:
         item = owned(connection, item_id, staff, lock=True)
         if item["status"] == "RETURNED":
@@ -164,7 +196,7 @@ def withdraw_item(item_id: int, staff=Depends(current_staff)):
 
 
 @router.post("/staff/items/{item_id}/images", status_code=201)
-def upload_image(item_id: int, file: UploadFile = File(), staff=Depends(current_staff)):
+def upload_image(item_id: int, file: UploadFile = File(), staff=Depends(organization_context)):
     with engine.connect() as connection:
         owned(connection, item_id, staff)
     data, media_type = validate_image(file)
@@ -206,7 +238,7 @@ def owned_photo(connection, item_id, image_id, staff):
 
 
 @router.put("/staff/items/{item_id}/images/{image_id}/cover", status_code=204)
-def set_cover(item_id: int, image_id: int, staff=Depends(current_staff)):
+def set_cover(item_id: int, image_id: int, staff=Depends(organization_context)):
     with engine.begin() as connection:
         owned_photo(connection, item_id, image_id, staff)
         query(connection, "UPDATE item_images SET is_cover = false WHERE item_id = :item AND is_cover",
@@ -216,7 +248,7 @@ def set_cover(item_id: int, image_id: int, staff=Depends(current_staff)):
 
 
 @router.delete("/staff/items/{item_id}/images/{image_id}", status_code=204)
-def remove_image(item_id: int, image_id: int, staff=Depends(current_staff)):
+def remove_image(item_id: int, image_id: int, staff=Depends(organization_context)):
     with engine.begin() as connection:
         photo = owned_photo(connection, item_id, image_id, staff)
         query(connection, """
@@ -233,7 +265,7 @@ def remove_image(item_id: int, image_id: int, staff=Depends(current_staff)):
 
 
 @router.post("/staff/items/{item_id}/images/{image_id}/retry", status_code=204)
-def retry_image(item_id: int, image_id: int, staff=Depends(current_staff)):
+def retry_image(item_id: int, image_id: int, staff=Depends(organization_context)):
     with engine.begin() as connection:
         owned_photo(connection, item_id, image_id, staff)
         result = query(connection, """
@@ -269,5 +301,5 @@ def public_photo(image_id: int):
 
 
 @router.get("/staff/images/{image_id}", responses={200: {"content": {"image/*": {}}}})
-def staff_photo(image_id: int, staff=Depends(current_staff)):
+def staff_photo(image_id: int, staff=Depends(organization_context)):
     return photo_response(image_id, staff["organization_id"])

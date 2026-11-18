@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Plus, LogOut, RefreshCw, ImagePlus, ShieldCheck } from "lucide-react";
-import { useSession } from "../hooks/useSession";
+import { Plus, RefreshCw, ImagePlus, Building2 } from "lucide-react";
+import { useOrganization } from "../hooks/useOrganization";
 import { api, staffImage } from "../services/api";
 import { categories, statusLabels, type Item, type ItemInput, type ItemList, type Photo } from "../types";
 
@@ -24,7 +24,8 @@ function StaffPhoto({ photo }: { photo: Photo }) {
 }
 
 export function StaffPage() {
-  const session = useSession();
+  const context = useOrganization();
+  const organization = context.organization;
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -38,12 +39,12 @@ export function StaffPage() {
 
   useEffect(() => {
     let active = true;
-    if (!session.account) { setItems({ items: [] }); setSelected(null); setForm({ ...blank }); setPage(1); return; }
+    if (!organization) { setItems({ items: [] }); setSelected(null); setForm({ ...blank }); setPage(1); return; }
     setError("");
     api.staffList(page).then((result) => { if (active) setItems(result); })
       .catch((reason) => { if (active) setError(reason.message); });
     return () => { active = false; };
-  }, [session.account, page]);
+  }, [organization?.id, page]);
 
   async function act(action: () => Promise<void>) {
     setBusy(true); setError(""); setNotice("");
@@ -87,56 +88,57 @@ export function StaffPage() {
       if (failures.length) setError("部分照片上傳失敗，請重新選取這些照片再上傳。" + failures.join("、"));
     });
   }
-  const alert = <>{(error || session.error) && <p role="alert" className="message error">{error || session.error}</p>}
+  const alert = <>{(error || context.error) && <p role="alert" className="message error">{error || context.error}</p>}
     {notice && <p role="status" className="message">{notice}</p>}</>;
 
-  if (session.checking) return <p className="message">確認登入中…</p>;
-  if (!session.account) return <div className="login-wrap">
-    <div className="page-heading"><ShieldCheck size={32} /><h1>機構承辦人登入</h1><p>登入後管理本機構保管的拾獲物。</p></div>
-    {alert}
-    <form className="panel" onSubmit={(event) => {
-      event.preventDefault();
-      const data = new FormData(event.currentTarget);
-      void act(() => session.login(String(data.get("username")), String(data.get("password"))));
-    }}>
-      <label>帳號<input name="username" required autoComplete="username" /></label>
-      <label>密碼<input name="password" type="password" required autoComplete="current-password" /></label>
-      <button disabled={busy}>{busy ? "登入中…" : "登入機構後台"}</button>
-    </form>
-  </div>;
+
+  if (context.loading) return <p className="message">載入保管機構中…</p>;
 
   return <>
-    <div className="row between page-heading"><div><span className="eyebrow">機構後台</span>
-      <h1>{session.account.organization.name}</h1><p>承辦人 {session.account.username}</p></div>
-      <button className="secondary" disabled={busy} onClick={() => void act(session.logout)}><LogOut size={17} />登出</button></div>
+    <div className="page-heading"><span className="eyebrow">尋物雷達</span>
+      <h1>拾獲物管理</h1><p>選擇保管機構後，直接建檔、上傳照片與登記歸還。</p></div>
     {alert}
-    <details className="panel"><summary>機構聯絡資訊與密碼</summary>
-      <form key={JSON.stringify(session.account.organization)} className="fields settings" onSubmit={(event) => {
-        event.preventDefault();
-        const data = new FormData(event.currentTarget);
-        void act(async () => {
-          await api.organization({ name: String(data.get("name")), address: String(data.get("address")), phone: String(data.get("phone")) });
-          await session.refresh(); setNotice("機構資訊已更新");
-        });
-      }}>
-        <label>機構名稱<input name="name" required maxLength={120} defaultValue={session.account.organization.name} /></label>
-        <label>對外地址<input name="address" required maxLength={240} defaultValue={session.account.organization.address} /></label>
-        <label>對外電話<input name="phone" required maxLength={50} defaultValue={session.account.organization.phone} /></label>
-        <div className="row"><button disabled={busy}>儲存機構資訊</button></div>
-      </form>
-      <form className="fields settings" onSubmit={(event) => {
-        event.preventDefault();
-        const data = new FormData(event.currentTarget);
-        void act(async () => {
-          await api.password(String(data.get("old")), String(data.get("next")));
-          session.signedOut(); setNotice("密碼已更新，請重新登入");
-        });
-      }}>
-        <label>原密碼<input type="password" name="old" required autoComplete="current-password" /></label>
-        <label>新密碼（至少 10 字元）<input type="password" name="next" required minLength={10} maxLength={160} autoComplete="new-password" /></label>
-        <div className="row"><button disabled={busy}>更新密碼</button></div>
-      </form>
-    </details>
+    <section className="panel">
+      <div className="row between"><h2><Building2 size={20} /> 保管機構</h2>
+        <button className="secondary" disabled={busy} onClick={() => void context.reload()}>重新整理機構</button></div>
+      <label>目前管理的機構<select value={organization?.id || ""} disabled={busy || context.organizations.length === 0}
+        onChange={(event) => { reset(); context.select(Number(event.target.value)); }}>
+        {!organization && <option value="">請先新增保管機構</option>}
+        {context.organizations.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+      </select></label>
+      {organization && <p className="muted small">{organization.address} · {organization.phone}</p>}
+      <details>
+        <summary>{organization ? "修改機構資訊或新增機構" : "新增保管機構"}</summary>
+        {organization && <form key={JSON.stringify(organization)} className="fields settings" onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          void act(async () => {
+            await api.organization({ name: String(data.get("name")), address: String(data.get("address")), phone: String(data.get("phone")) });
+            await context.reload(organization.id); setNotice("機構資訊已更新");
+          });
+        }}>
+          <label>機構名稱<input name="name" required maxLength={120} defaultValue={organization.name} /></label>
+          <label>對外地址<input name="address" required maxLength={240} defaultValue={organization.address} /></label>
+          <label>對外電話<input name="phone" required maxLength={50} defaultValue={organization.phone} /></label>
+          <div className="row"><button disabled={busy}>儲存機構資訊</button></div>
+        </form>}
+        <form className="fields settings" onSubmit={(event) => {
+          event.preventDefault();
+          const formElement = event.currentTarget;
+          const data = new FormData(formElement);
+          void act(async () => {
+            const created = await api.createOrganization({ name: String(data.get("name")), address: String(data.get("address")), phone: String(data.get("phone")) });
+            reset(); await context.reload(created.id); formElement.reset(); setNotice("保管機構已建立");
+          });
+        }}>
+          <label>新機構名稱<input name="name" required maxLength={120} /></label>
+          <label>新機構地址<input name="address" required maxLength={240} /></label>
+          <label>新機構電話<input name="phone" required maxLength={50} /></label>
+          <div className="row"><button disabled={busy}>新增機構</button></div>
+        </form>
+      </details>
+    </section>
+    {organization && <>
     <form ref={formRef} className="panel" onSubmit={save}>
       <div className="form-banner"><ImagePlus size={24} /><div><h2>{selected ? "編輯拾獲物" : "拾獲物建檔"}</h2>
         <p>照片上傳後，自動擷取圖片特徵供民眾比對。</p></div></div>
@@ -151,16 +153,16 @@ export function StaffPage() {
         <label>拾獲日期 <span className="required">必填</span><input required type="date" value={form.found_date} onChange={(event) => update("found_date", event.target.value)} /></label>
         <label>新增照片（選填）<input ref={fileInput} type="file" multiple accept="image/jpeg,image/png,image/webp"
           disabled={busy || Boolean(selected && selected.status !== "AVAILABLE")} onChange={(event) => setPhotos(Array.from(event.target.files || []))} /></label>
-        <label className="wide">內部核對備註（選填）<textarea rows={3} maxLength={2000} value={form.private_note} onChange={(event) => update("private_note", event.target.value)} /></label>
+        <label className="wide">核對備註（選填）<textarea rows={3} maxLength={2000} value={form.private_note} onChange={(event) => update("private_note", event.target.value)} /></label>
       </div>
-      <p className="muted small">每件物品最多八張照片，每張最多 8 MB。內部備註僅供本機構承辦人查看。</p>
+      <p className="muted small">每件物品最多八張照片，每張最多 8 MB。備註顯示於物品管理頁，公開搜尋詳情不顯示。</p>
       <div className="row"><button disabled={busy}>{busy ? "儲存中…" : "儲存物品"}</button>
         <button type="button" disabled={busy} className="secondary" onClick={reset}><Plus size={17} />新增另一件</button></div>
     </form>
     {selected && <section className="panel">
       <div className="row between"><h2>物品狀態與照片</h2><button className="secondary" disabled={busy}
         onClick={() => void act(() => refresh(selected.id))}><RefreshCw size={16} />重新整理</button></div>
-      {selected.returned_at && <p>歸還時間 {new Date(selected.returned_at).toLocaleString("zh-TW")} · 登記人帳號 ID {selected.returned_by}</p>}
+      {selected.returned_at && <p>歸還時間 {new Date(selected.returned_at).toLocaleString("zh-TW")}</p>}
       {selected.status === "AVAILABLE" && <div className="row">
         <button disabled={busy} onClick={() => {
           if (confirm("確認物品已實際交還？")) void act(async () => { await api.action(selected.id, "return"); await refresh(selected.id); });
@@ -198,5 +200,6 @@ export function StaffPage() {
       {page > 1 && <button disabled={busy} className="secondary" onClick={() => setPage(page - 1)}>上一頁</button>}
       {items.has_more && <button disabled={busy} className="secondary" onClick={() => setPage(page + 1)}>下一頁</button>}
     </div>
+    </>}
   </>;
 }

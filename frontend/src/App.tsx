@@ -22,7 +22,7 @@ export default function App() {
       <nav aria-label="主選單">
         <a href="#hall" className={page === "hall" ? "active" : ""}><LayoutGrid size={18} />失物大廳</a>
         <a href="#photo" className={page === "photo" ? "active" : ""}><ScanLine size={18} />照片搜尋</a>
-        <a href="#staff" className={page === "staff" ? "active" : ""}><ShieldCheck size={18} />機構後台</a>
+        <a href="#staff" className={page === "staff" ? "active" : ""}><ShieldCheck size={18} />拾獲物管理</a>
       </nav>
     </div></header>
     <main className="shell">{page === "staff" ? <StaffPage /> : <HallPage key={page} photoMode={page === "photo"} />}</main>

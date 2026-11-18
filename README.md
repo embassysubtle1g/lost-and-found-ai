@@ -1,11 +1,11 @@
 # Lost-and-Found-System
 
-機構保管拾獲物，民眾免登入查詢。前端依「尋物雷達」頁面改寫成 React／TypeScript，所有物品和照片搜尋都呼叫 Backend API。
+使用者可直接選擇保管機構建檔、查詢與登記歸還，全系統免登入。前端依「尋物雷達」頁面改寫成 React／TypeScript，所有物品和照片搜尋都呼叫 Backend API。
 
 | 目錄 | 用途 |
 | --- | --- |
 | backend/app/api | 路由與權限入口 |
-| backend/app/core | 設定、資料庫、安全性與既有遷移 |
+| backend/app/core | 設定、資料庫與既有遷移 |
 | backend/app/models | 資料存取 |
 | backend/app/schemas | 請求格式 |
 | backend/app/services | 圖片儲存、向量處理與業務流程 |

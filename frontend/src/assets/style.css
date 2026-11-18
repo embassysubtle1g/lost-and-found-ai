@@ -73,9 +73,6 @@ dt { color: #64748b; }
 dd { margin: 0; overflow-wrap: anywhere; }
 .contact-box { background: #f0f9ff; padding: 1rem; border-radius: 12px; margin-top: 1rem; }
 .contact-box p { display: flex; gap: .4rem; align-items: center; margin-bottom: .4rem; }
-.login-wrap { max-width: 440px; margin: 2rem auto; }
-.login-wrap label { margin-bottom: 1rem; }
-.login-wrap button { width: 100%; }
 .form-banner { display: flex; gap: .8rem; align-items: center; background: linear-gradient(110deg, #0f172a, #334155); color: #fff; border-radius: 10px; padding: 1rem; margin-bottom: 1rem; }
 .form-banner h2 { margin: 0; }
 .form-banner p { font-size: .8rem; margin: .4rem 0 0; color: #cbd5e1; }

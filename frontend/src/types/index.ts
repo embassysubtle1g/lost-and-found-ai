@@ -4,7 +4,6 @@ export const statusLabels: Record<string, string> = {
   PENDING: "等待處理", PROCESSING: "處理中", COMPLETED: "向量已就緒", FAILED: "處理失敗",
 };
 export interface Organization { id: number; name: string; address: string; phone: string }
-export interface Account { id: number; username: string; organization: Organization }
 export interface Photo {
   id: number; is_cover: boolean; media_type: string;
   state?: string; error?: string; model?: string; model_version?: string;
