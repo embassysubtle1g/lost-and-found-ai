@@ -28,13 +28,15 @@ async def lifespan(app):
 app = FastAPI(title="拾獲物招領 API", lifespan=lifespan)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(items.router, prefix="/api/v1")
-app.mount("/assets", StaticFiles(directory=DEMO), name="assets")
+FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+ASSETS = FRONTEND / "assets" if (FRONTEND / "assets").is_dir() else DEMO
+app.mount("/assets", StaticFiles(directory=ASSETS), name="assets")
 
 
 @app.get("/", include_in_schema=False)
 @app.get("/staff", include_in_schema=False)
 def demo():
-    return FileResponse(DEMO / "index.html")
+    return FileResponse(FRONTEND / "index.html" if (FRONTEND / "index.html").is_file() else DEMO / "index.html")
 
 
 @app.get("/health")

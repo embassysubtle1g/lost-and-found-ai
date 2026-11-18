@@ -9,4 +9,5 @@ class ItemData(BaseModel):
     category: str = Field(min_length=1, max_length=80)
     found_date: date
     found_location: str = Field(min_length=1, max_length=240)
+    found_region: str = Field(default="", max_length=120)
     private_note: str = Field(default="", max_length=2000)

@@ -14,7 +14,7 @@ from ..services.media import MODEL, VERSION, bucket, embedding, get_photo, stora
 
 router = APIRouter(tags=["items"])
 PUBLIC_FIELDS = """
-    i.id, i.reference, i.name, i.category, i.found_date, i.found_location,
+    i.id, i.reference, i.name, i.category, i.found_date, i.found_location, i.found_region,
     o.id AS organization_id, o.name AS organization_name,
     o.address AS organization_address, o.phone AS organization_phone,
     (SELECT id FROM item_images WHERE item_id = i.id AND is_cover
@@ -25,19 +25,21 @@ FILTERS = """
     i.status = 'AVAILABLE'
     AND (:keyword = '' OR i.name ILIKE :keyword_pattern OR i.reference ILIKE :keyword_pattern)
     AND (:category = '' OR i.category = :category)
-    AND (:location = '' OR i.found_location ILIKE :location_pattern)
+    AND (:location = '' OR i.found_region ILIKE :location_pattern
+         OR (i.found_region = '' AND i.found_location ILIKE :location_pattern))
+    AND (CAST(:lost_date AS date) IS NULL OR i.found_date >= CAST(:lost_date AS date))
     AND (:organization = 0 OR i.organization_id = :organization)
     AND (CAST(:since AS date) IS NULL OR i.found_date >= CAST(:since AS date))
     AND (CAST(:until AS date) IS NULL OR i.found_date <= CAST(:until AS date))
 """
 
 
-def public_filters(keyword, category, location, organization, since, until):
+def public_filters(keyword, category, location, organization, since, until, lost_date=None):
     if since and until and since > until:
         raise HTTPException(422, "起始日期不可晚於結束日期")
     return dict(keyword=keyword, keyword_pattern=f"%{keyword}%", category=category,
                 location=location, location_pattern=f"%{location}%",
-                organization=organization, since=since, until=until)
+                organization=organization, since=since, until=until, lost_date=lost_date)
 
 
 @router.get("/public/organizations")
@@ -49,9 +51,9 @@ def organizations():
 @router.get("/public/items")
 def public_items(keyword: str = Query("", max_length=120), category: str = Query("", max_length=80),
                  location: str = Query("", max_length=240), organization: int = Query(0, ge=0),
-                 since: date | None = None, until: date | None = None,
+                 since: date | None = None, until: date | None = None, lost_date: date | None = None,
                  page: int = Query(1, ge=1, le=100000), limit: int = Query(20, ge=1, le=50)):
-    filters = public_filters(keyword, category, location, organization, since, until)
+    filters = public_filters(keyword, category, location, organization, since, until, lost_date)
     with engine.connect() as connection:
         result = rows(connection, f"""
             SELECT {PUBLIC_FIELDS} {PUBLIC_FROM} WHERE {FILTERS}
@@ -72,11 +74,12 @@ def public_item(item_id: int):
 
 
 @router.post("/public/search")
-def search(file: UploadFile = File(), category: str = Form("", max_length=80),
+def search(file: UploadFile = File(), keyword: str = Form("", max_length=120), category: str = Form("", max_length=80),
            location: str = Form("", max_length=240), organization: int = Form(0, ge=0),
            since: date | None = Form(None), until: date | None = Form(None),
+           lost_date: date | None = Form(None),
            limit: int = Form(12, ge=1, le=30)):
-    filters = public_filters("", category, location, organization, since, until)
+    filters = public_filters(keyword, category, location, organization, since, until, lost_date)
     data, media_type = validate_image(file)
     try:
         vector = embedding(data, media_type)
@@ -100,7 +103,7 @@ def staff_items(page: int = Query(1, ge=1, le=100000), limit: int = Query(20, ge
                 staff=Depends(current_staff)):
     with engine.connect() as connection:
         result = rows(connection, """
-            SELECT id, reference, name, category, found_date, found_location, status, returned_at
+            SELECT id, reference, name, category, found_date, found_location, found_region, status, returned_at
             FROM items WHERE organization_id = :org ORDER BY id DESC LIMIT :limit OFFSET :offset
         """, org=staff["organization_id"], limit=limit + 1, offset=(page - 1) * limit)
     return {"items": result[:limit], "page": page, "has_more": len(result) > limit}
@@ -111,8 +114,8 @@ def create_item(data: ItemData, staff=Depends(current_staff)):
     with engine.begin() as connection:
         item = one(connection, """
             INSERT INTO items(reference, organization_id, name, category, found_date,
-                              found_location, private_note)
-            VALUES (:reference, :org, :name, :category, :found_date, :found_location, :private_note)
+                              found_location, found_region, private_note)
+            VALUES (:reference, :org, :name, :category, :found_date, :found_location, :found_region, :private_note)
             RETURNING *
         """, reference=uuid.uuid4().hex.upper(), org=staff["organization_id"], **data.model_dump())
     return dict(item)
@@ -130,7 +133,7 @@ def edit_item(item_id: int, data: ItemData, staff=Depends(current_staff)):
         owned(connection, item_id, staff, lock=True)
         item = one(connection, """
             UPDATE items SET name = :name, category = :category, found_date = :found_date,
-                found_location = :found_location, private_note = :private_note
+                found_location = :found_location, found_region = :found_region, private_note = :private_note
             WHERE id = :id RETURNING *
         """, id=item_id, **data.model_dump())
     return dict(item)
