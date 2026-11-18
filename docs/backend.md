@@ -4,21 +4,21 @@
 
 ## Windows 本機啟動
 
-需要 Python 3.10 以上、Docker Desktop 和瀏覽器。從 GitHub 下載此分支後，在 PowerShell 進入本目錄。
+需要 Python 3.10 以上、Docker Desktop 和瀏覽器。從 GitHub 下載此分支後，在 PowerShell 從儲存庫根目錄進入 `backend/`。
 
 ```powershell
 cd backend
-Copy-Item .env.example .env
+Copy-Item app/core/.env.example .env
 ```
 
 在 `.env` 設定本機資料庫與物件儲存密碼。若修改 `POSTGRES_PASSWORD`，也請同步更新 `DATABASE_URL` 中的密碼（特殊字元需 URL 編碼）。將 `DINOV2_URL` 設為電腦可連到的 AI Service 基底網址。
 
 ```powershell
-docker compose up -d --wait
+docker compose --project-directory . --env-file .env -f app/core/compose.yaml up -d --wait
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe seed_demo.py
+.\.venv\Scripts\python.exe -m alembic -c app/core/alembic.ini upgrade head
+.\.venv\Scripts\python.exe -m app.core.seed_demo
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8000
 ```
 

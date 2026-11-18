@@ -2,7 +2,7 @@
 
 | 目錄 | 用途 |
 | --- | --- |
-| [backend/](backend/README.md) | 主系統 FastAPI 後端，負責物品、權限、圖片儲存及搜尋 |
+| [backend/](docs/backend.md) | 主系統 FastAPI 後端，負責物品、權限、圖片儲存及搜尋 |
 | [frontend/](frontend/README.md) | 團隊 React 前端的整合位置 |
 | [services/lost-and-found-ai/](services/lost-and-found-ai/使用說明.md) | 獨立的 DINOv2 圖片特徵擷取服務 |
 | [docs/](docs/integration.md) | 服務串接方式 |

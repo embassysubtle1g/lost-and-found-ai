@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from threading import Event, Thread
 
 from fastapi import FastAPI
@@ -6,10 +7,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import auth, items
-from .core.db import ROOT
 from .services.media import ensure_bucket, run_worker
 
-DEMO = ROOT / "demo"
+DEMO = Path(__file__).resolve().parent / "api" / "demo"
 
 
 @asynccontextmanager

@@ -5,4 +5,4 @@
 - 向量請求使用 `POST /api/v1/images/embedding`，上傳欄位是 `file`。目前兩端使用 `facebook/dinov2-base`（`dinov2_vitb14`），向量長度為 768。
 - 主系統後端負責向量儲存與相似度搜尋。AI 服務的 API 文件位於 `http://127.0.0.1:8080/docs`。
 
-啟動方式請見 [主系統後端](../backend/README.md) 與 [AI 服務](../services/lost-and-found-ai/使用說明.md)。
+啟動方式請見 [主系統後端](backend.md) 與 [AI 服務](../services/lost-and-found-ai/使用說明.md)。

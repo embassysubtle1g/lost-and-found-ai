@@ -22,5 +22,5 @@ class ApiLayoutTests(unittest.TestCase):
 
     def test_demo_assets_resolve_from_backend(self):
         backend = Path(__file__).resolve().parents[1]
-        self.assertEqual(DEMO, backend / "demo")
+        self.assertEqual(DEMO, backend / "app" / "api" / "demo")
         self.assertTrue((DEMO / "index.html").is_file())
