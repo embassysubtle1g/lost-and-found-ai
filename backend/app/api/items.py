@@ -23,7 +23,7 @@ PUBLIC_FIELDS = """
 """
 PUBLIC_FROM = "FROM items i JOIN organizations o ON o.id = i.organization_id"
 FILTERS = """
-    i.status = 'AVAILABLE'
+    i.status = 'AVAILABLE' AND i.record_type = 'FOUND'
     AND (:keyword = '' OR i.name ILIKE :keyword_pattern OR i.reference ILIKE :keyword_pattern)
     AND (:category = '' OR i.category = :category)
     AND (:location = '' OR i.found_region ILIKE :location_pattern

@@ -1,19 +1,10 @@
 # Lost-and-Found-System
 
-使用者可直接選擇保管機構建檔、查詢與登記歸還，全系統免登入。前端依「尋物雷達」頁面改寫成 React／TypeScript，所有物品和照片搜尋都呼叫 Backend API。
+尋物雷達的前端完整依據提供的遺失物.txt 頁面呈現，包含失物大廳、登記通報、AI 媒合中心與詳情視窗。全系統免登入。
 
-| 目錄 | 用途 |
-| --- | --- |
-| backend/app/api | 路由與權限入口 |
-| backend/app/core | 設定、資料庫與既有遷移 |
-| backend/app/models | 資料存取 |
-| backend/app/schemas | 請求格式 |
-| backend/app/services | 圖片儲存、向量處理與業務流程 |
-| backend/tests | API 與搜尋規則驗證 |
-| frontend/src | React 頁面、元件、Hooks、型別和 API 用戶端 |
-| services/lost-and-found-ai | 獨立 DINOv2 服務 |
-| docs | 啟動、API 與整合說明 |
+- frontend/ 放 React 入口與原稿完整頁面。
+- backend/ 放 FastAPI、資料庫模型、API 與圖片／配對邏輯。
+- services/lost-and-found-ai/ 放 DINOv2 獨立圖片特徵服務。
+- docs/frontend-reference.md 說明原稿介面與 API 差異。
 
-`Lost-and-Found-System/` 代表儲存庫根目錄的專案名稱。下載 ZIP 的資料夾名稱由 GitHub 依儲存庫與分支產生，可自行將解壓縮資料夾改名。
-
-先看 [啟動說明](docs/backend.md)，API 對照表見 [整合說明](docs/integration.md)。
+更新後先建置前端，再執行 Alembic 0004 遷移、重新啟動後端。詳見 [啟動方式](docs/backend.md)。

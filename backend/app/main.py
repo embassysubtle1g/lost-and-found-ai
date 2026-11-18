@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import items
+from .api import items, radar
 from .services.media import ensure_bucket, run_worker
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -27,6 +27,7 @@ async def lifespan(app):
 
 app = FastAPI(title="尋物雷達 API", lifespan=lifespan)
 app.include_router(items.router, prefix="/api/v1")
+app.include_router(radar.router, prefix="/api")
 app.mount("/assets", StaticFiles(directory=FRONTEND / "assets", check_dir=False), name="assets")
 
 
@@ -47,3 +48,9 @@ def frontend():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/radar.html", include_in_schema=False)
+def radar_page():
+    if not (FRONTEND / "radar.html").is_file():
+        return frontend()
+    return FileResponse(FRONTEND / "radar.html")
