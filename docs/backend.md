@@ -3,7 +3,7 @@
 在 Codespaces 執行後端的終端機按 Ctrl+C 停止舊程序，從專案根目錄開始：
 
 ```bash
-git pull --ff-only origin backend/first-edition
+git pull --ff-only origin Lost-and-Found-System
 npm --prefix frontend ci
 npm --prefix frontend run build
 cd backend
