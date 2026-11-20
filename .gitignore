@@ -24,3 +24,8 @@ weights/
 
 # OS
 .DS_Store
+
+# Frontend
+node_modules/
+dist/
+*.tsbuildinfo

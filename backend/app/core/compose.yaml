@@ -1,0 +1,29 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: lost_found
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: lost_found
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lost_found"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  storage:
+    image: ghcr.io/coollabsio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_ACCESS_KEY:?Set OBJECT_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${OBJECT_SECRET_KEY:?Set OBJECT_SECRET_KEY in .env}
+    ports:
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - image_data:/data
+volumes:
+  postgres_data:
+  image_data:

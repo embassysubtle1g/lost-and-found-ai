@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>尋物雷達 - AI 智慧失物招領與物品辨識系統</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Google Fonts: Noto Sans TC 與 Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- 載入 Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+                    },
+                    colors: {
+                        radar: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 自訂掃描動畫與平滑捲動 */
+        @keyframes scanLine {
+            0% { top: 0%; opacity: 0.2; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0.2; }
+        }
+        .ai-scan-bar {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, transparent, #38bdf8, #818cf8, transparent);
+            box-shadow: 0 0 12px #38bdf8;
+            animation: scanLine 1.5s linear infinite;
+        }
+        .tab-active {
+            border-bottom: 2px solid #0284c7;
+            color: #0284c7;
+            font-weight: 600;
+        }
+        /* 隱藏捲軸但保留功能 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- 品牌 Logo -->
+                <div class="flex items-center gap-3 cursor-pointer" onclick="switchTab('hall')">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-500/20">
+                        <i data-lucide="radar" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-lg tracking-tight text-slate-900">尋物雷達</span>
+                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">AI 智慧辨識</span>
+                        </div>
+                        <p class="text-xs text-slate-500 hidden sm:block">基於影像辨識與資料庫關聯之智慧失物媒合平台</p>
+                    </div>
+                </div>
+
+                <!-- 桌面版導覽分頁 -->
+                <nav class="hidden md:flex items-center space-x-1">
+                    <button id="nav-hall" onclick="switchTab('hall')" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium text-sky-600 bg-sky-50 transition flex items-center gap-2">
+                        <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                        失物大廳
+                    </button>
+                    <button id="nav-report" onclick="switchTab('report')" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition flex items-center gap-2">
+                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                        登記通報
+                    </button>
+                    <button id="nav-matches" onclick="switchTab('matches')" class="nav-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition flex items-center gap-2 relative">
+                        <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
+                        AI 智慧媒合中心
+                        <span id="match-badge" class="ml-1 px-1.5 py-0.2 text-xs font-bold rounded-full bg-rose-500 text-white">0</span>
+                    </button>
+                </nav>
+
+                <!-- 右側前後端 API 對接開關與規格按鈕 -->
+                <div class="flex items-center gap-2">
+                    <button onclick="openApiModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition">
+                        <span id="api-status-dot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span class="hidden sm:inline">API 對接與資料庫結構</span>
+                        <span class="sm:hidden">API 規格</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 手機版底部快捷導覽列 -->
+        <div class="md:hidden flex border-t border-slate-100 bg-white">
+            <button id="m-nav-hall" onclick="switchTab('hall')" class="flex-1 py-2.5 text-xs font-medium text-sky-600 flex flex-col items-center gap-1 border-b-2 border-sky-600">
+                <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                失物大廳
+            </button>
+            <button id="m-nav-report" onclick="switchTab('report')" class="flex-1 py-2.5 text-xs font-medium text-slate-500 flex flex-col items-center gap-1">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                登記通報
+            </button>
+            <button id="m-nav-matches" onclick="switchTab('matches')" class="flex-1 py-2.5 text-xs font-medium text-slate-500 flex flex-col items-center gap-1 relative">
+                <div class="relative">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
+                    <span id="m-match-badge" class="absolute -top-1.5 -right-2.5 px-1 text-[10px] font-bold rounded-full bg-rose-500 text-white">0</span>
+                </div>
+                AI 媒合
+            </button>
+        </div>
+    </header>
+
+    <!-- 全域提示訊息 Toast 容器 -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- 主內容區 -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- ========================================================= -->
+        <!-- 分頁 1：失物大廳（總覽與搜尋）                             -->
+        <!-- ========================================================= -->
+        <section id="view-hall" class="space-y-6">
+            <!-- 頂部統計數據卡片 -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500">遺失協尋中 (Lost_Items)</p>
+                        <p id="stat-lost" class="text-2xl font-bold text-slate-900 mt-1">0</p>
+                        <p class="text-xs text-rose-600 mt-1 flex items-center gap-1">
+                            <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> 等待好心人尋獲
+                        </p>
+                    </div>
+                    <div class="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                        <i data-lucide="search" class="w-6 h-6"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500">待認領拾獲物 (Found_Items)</p>
+                        <p id="stat-found" class="text-2xl font-bold text-slate-900 mt-1">0</p>
+                        <p class="text-xs text-sky-600 mt-1 flex items-center gap-1">
+                            <i data-lucide="package-check" class="w-3.5 h-3.5"></i> 已建檔完成 AI 特徵提取
+                        </p>
+                    </div>
+                    <div class="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                        <i data-lucide="inbox" class="w-6 h-6"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-medium text-slate-500">AI 智慧媒合 / 已結案</p>
+                        <div class="flex items-baseline gap-2 mt-1">
+                            <p id="stat-matched" class="text-2xl font-bold text-emerald-600">0</p>
+                            <span class="text-xs text-slate-400">件成功歸還</span>
+                        </div>
+                        <p class="text-xs text-amber-600 mt-1 flex items-center gap-1 cursor-pointer hover:underline" onclick="switchTab('matches')">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> 點擊查看潛在配對建議 &rarr;
+                        </p>
+                    </div>
+                    <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                        <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 多維度篩選器區塊 -->
+            <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <!-- 類型切換按鈕群組 -->
+                    <div class="inline-flex p-1 rounded-xl bg-slate-100 self-start">
+                        <button onclick="setFilterType('ALL')" id="filter-type-ALL" class="type-pill px-4 py-1.5 rounded-lg text-sm font-medium bg-white text-slate-900 shadow-sm transition">
+                            全部案件
+                        </button>
+                        <button onclick="setFilterType('LOST')" id="filter-type-LOST" class="type-pill px-4 py-1.5 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 transition">
+                            遺失協尋
+                        </button>
+                        <button onclick="setFilterType('FOUND')" id="filter-type-FOUND" class="type-pill px-4 py-1.5 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 transition">
+                            拾獲招領
+                        </button>
+                    </div>
+
+                    <!-- 搜尋框與下拉選單 -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 lg:max-w-2xl">
+                        <!-- 關鍵字搜尋 -->
+                        <div class="relative">
+                            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                            <input type="text" id="search-keyword" oninput="renderItemsGrid()" placeholder="搜尋物品名稱、顏色、AI標籤..." class="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500">
+                        </div>
+
+                        <!-- 物品分類篩選 -->
+                        <select id="filter-category" onchange="renderItemsGrid()" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 text-slate-700">
+                            <option value="ALL">所有物品分類</option>
+                            <option value="3C電子">3C電子 (手機/耳機/行動電源)</option>
+                            <option value="證件錢包">證件錢包 (學生證/皮夾/悠遊卡)</option>
+                            <option value="鑰匙配件">鑰匙配件 (鑰匙圈/手錶/眼鏡)</option>
+                            <option value="隨身衣物">隨身衣物 (外套/水壺/雨傘)</option>
+                            <option value="其他">其他物品</option>
+                        </select>
+
+                        <!-- 地點篩選 (Locations) -->
+                        <select id="filter-location" onchange="renderItemsGrid()" class="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 text-slate-700">
+                            <option value="ALL">所有地點 (Locations)</option>
+                            <option value="圖書館">圖書館</option>
+                            <option value="學生活動中心">學生活動中心</option>
+                            <option value="綜合教學大樓">綜合教學大樓</option>
+                            <option value="第一學生餐廳">第一學生餐廳</option>
+                            <option value="體育館">體育館</option>
+                            <option value="校門口警衛室">校門口警衛室</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 物品展示卡片網格 -->
+            <div id="items-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                <!-- 由 JavaScript 動態渲染卡片 -->
+            </div>
+
+            <!-- 空狀態提示 -->
+            <div id="empty-state" class="hidden bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                <div class="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="search-x" class="w-8 h-8"></i>
+                </div>
+                <h3 class="text-base font-semibold text-slate-800">找不到符合條件的物品</h3>
+                <p class="text-sm text-slate-500 mt-1">請嘗試調整篩選條件，或前往「登記通報」建立新的協尋紀錄。</p>
+                <button onclick="resetFilters()" class="mt-4 px-4 py-2 rounded-xl bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 transition">
+                    重設所有篩選條件
+                </button>
+            </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- 分頁 2：登記通報（遺失 / 拾獲表單 + AI 智慧辨識模擬）       -->
+        <!-- ========================================================= -->
+        <section id="view-report" class="hidden max-w-4xl mx-auto">
+            <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+                <!-- 表單頂部類型選擇橫幅 -->
+                <div class="p-6 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
+                    <h2 class="text-xl font-bold flex items-center gap-2">
+                        <i data-lucide="scan-line" class="w-6 h-6 text-sky-400"></i>
+                        登記失物 / 拾獲通報
+                    </h2>
+                    <p class="text-sm text-slate-300 mt-1">上傳物品照片，自動產生名稱、分類與外觀描述，確認後登記並進行圖片比對。</p>
+
+                    <!-- 切換報失 / 拾獲 -->
+                    <div class="grid grid-cols-2 gap-3 mt-5 max-w-md">
+                        <button type="button" id="btn-mode-LOST" onclick="setReportMode('LOST')" class="py-2.5 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-rose-500 text-white shadow-lg shadow-rose-500/30 transition">
+                            <i data-lucide="help-circle" class="w-4 h-4"></i>
+                            我要報失 (遺失物品)
+                        </button>
+                        <button type="button" id="btn-mode-FOUND" onclick="setReportMode('FOUND')" class="py-2.5 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-white/10 text-slate-200 hover:bg-white/20 transition">
+                            <i data-lucide="hand-heart" class="w-4 h-4"></i>
+                            我撿到東西 (拾獲招領)
+                        </button>
+                    </div>
+                </div>
+
+                <form id="report-form" onsubmit="handleReportSubmit(event)" class="p-6 sm:p-8 space-y-6">
+                    <input type="hidden" id="report-type" value="LOST">
+
+                    <!-- 區塊 1：圖片上傳與 AI 智慧辨識模擬區 -->
+                    <div class="bg-sky-50/60 border border-sky-200/80 rounded-2xl p-5">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                            <div>
+                                <h3 class="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                                    <i data-lucide="cpu" class="w-4 h-4 text-sky-600"></i>
+                                    AI 影像辨識與特徵提取 (Item_Images)
+                                </h3>
+                                <p class="text-xs text-slate-500">語言 AI 提供物品描述與分類，DINOv2 提供圖片比對特徵</p>
+                            </div>
+                            <!-- 快速套用測試圖片按鈕（方便課堂 Demo） -->
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-[11px] text-slate-400">Demo 範例圖：</span>
+                                <button type="button" onclick="loadDemoImage('earbuds')" class="text-xs px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-sky-400 text-slate-700 transition">藍牙耳機</button>
+                                <button type="button" onclick="loadDemoImage('wallet')" class="text-xs px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-sky-400 text-slate-700 transition">黑色短夾</button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 items-center">
+                            <!-- 上傳與預覽框 -->
+                            <div id="drop-zone" onclick="document.getElementById('image-input').click()" class="relative h-52 rounded-xl border-2 border-dashed border-sky-300 bg-white hover:bg-sky-50/50 transition cursor-pointer flex flex-col items-center justify-center overflow-hidden group">
+                                <input type="file" id="image-input" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                                
+                                <!-- 預設提示 -->
+                                <div id="upload-placeholder" class="text-center p-4">
+                                    <div class="w-12 h-12 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center mx-auto mb-2 group-hover:scale-110 transition">
+                                        <i data-lucide="image-plus" class="w-6 h-6"></i>
+                                    </div>
+                                    <p class="text-sm font-medium text-slate-700">點擊或拖曳上傳物品照片</p>
+                                    <p class="text-xs text-slate-400 mt-1">支援 JPG, PNG, WEBP 格式</p>
+                                </div>
+
+                                <!-- 圖片預覽 -->
+                                <img id="image-preview" src="" alt="物品預覽" class="hidden w-full h-full object-cover">
+
+                                <!-- AI 掃描動畫遮罩 -->
+                                <div id="ai-scanning-overlay" class="hidden absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] flex flex-col items-center justify-center text-white">
+                                    <div class="ai-scan-bar"></div>
+                                    <i data-lucide="sparkles" class="w-8 h-8 text-sky-400 animate-spin mb-2"></i>
+                                    <p class="text-sm font-semibold tracking-wide">AI 視覺模型分析特徵中...</p>
+                                    <p class="text-xs text-sky-300 mt-1">正在提取類別、色彩與外觀輪廓</p>
+                                </div>
+                            </div>
+
+                            <!-- AI 辨識觸發與結果摘要 -->
+                            <div class="space-y-3">
+                                <button type="button" id="btn-run-ai" onclick="runAiRecognition()" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white font-semibold text-sm shadow-md shadow-sky-500/20 flex items-center justify-center gap-2 transition">
+                                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+                                    執行 AI 智慧辨識特徵
+                                </button>
+
+                                <div id="ai-result-box" class="bg-white rounded-xl p-3.5 border border-slate-200 text-xs space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-semibold text-slate-700">AI 辨識狀態：</span>
+                                        <span id="ai-status-badge" class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">尚未執行辨識</span>
+                                    </div>
+                                    <p id="ai-confidence-text" class="text-slate-500">上傳照片並點擊辨識，自動填入物品資訊；模型無法確認的細節請自行核對。</p>
+                                    <div id="ai-tags-preview" class="flex flex-wrap gap-1.5 pt-1"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 區塊 2：基本物品資訊 -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">物品名稱 <span class="text-rose-500">*</span></label>
+                            <input type="text" id="item-title" required placeholder="例如：AirPods Pro 無線耳機、黑色皮革短夾" class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">物品分類 (Category) <span class="text-rose-500">*</span></label>
+                            <select id="item-category" required class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 bg-white">
+                                <option value="3C電子">3C電子</option>
+                                <option value="證件錢包">證件錢包</option>
+                                <option value="鑰匙配件">鑰匙配件</option>
+                                <option value="隨身衣物">隨身衣物</option>
+                                <option value="其他">其他</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">主要顏色 (AI 自動偵測/可微調) <span class="text-rose-500">*</span></label>
+                            <input type="text" id="item-color" required placeholder="例如：白色、消光黑、深藍色" class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">AI 特徵標籤 (以逗號分隔)</label>
+                            <input type="text" id="item-tags" placeholder="例如：透明保護殼, 吊飾, 刮痕" class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500">
+                        </div>
+                    </div>
+
+                    <!-- 區塊 3：地點與時間 (對應 Locations 資料表) -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
+                        <div>
+                            <label id="label-location" class="block text-sm font-medium text-slate-700 mb-1">遺失地點 (Locations) <span class="text-rose-500">*</span></label>
+                            <select id="item-location" required class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500 bg-white">
+                                <option value="圖書館">圖書館</option>
+                                <option value="學生活動中心">學生活動中心</option>
+                                <option value="綜合教學大樓">綜合教學大樓</option>
+                                <option value="第一學生餐廳">第一學生餐廳</option>
+                                <option value="體育館">體育館</option>
+                                <option value="校門口警衛室">校門口警衛室</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">詳細位置補充</label>
+                            <input type="text" id="item-location-detail" placeholder="例如：3樓自習室靠窗座位" class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500">
+                        </div>
+
+                        <div>
+                            <label id="label-datetime" class="block text-sm font-medium text-slate-700 mb-1">遺失日期時間 <span class="text-rose-500">*</span></label>
+                            <input type="datetime-local" id="item-datetime" required class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500">
+                        </div>
+                    </div>
+
+                    <!-- 詳細描述 -->
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">物品特徵與補充說明</label>
+                        <textarea id="item-description" rows="2" placeholder="請描述物品外觀細節、品牌型號，若為拾獲物可註明目前寄放處（如：已送交生輔組或警衛室）..." class="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 focus:border-sky-500"></textarea>
+                    </div>
+
+                    <!-- 區塊 4：聯絡人資訊 (對應 Users 資料表) -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/80 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">通報人姓名 / 暱稱 (Users) <span class="text-rose-500">*</span></label>
+                            <input type="text" id="user-name" required placeholder="例如：資管系 王同學" class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">聯絡方式 (電話 / Line ID / Email) <span class="text-rose-500">*</span></label>
+                            <input type="text" id="user-contact" required placeholder="例如：Line: wang_123 或 0912-345-678" class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500">
+                        </div>
+                    </div>
+
+                    <!-- 送出按鈕 -->
+                    <div class="flex items-center justify-end gap-3 pt-2">
+                        <button type="button" onclick="switchTab('hall')" class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition">
+                            取消返回
+                        </button>
+                        <button type="submit" class="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold shadow-md shadow-sky-600/20 flex items-center gap-2 transition">
+                            <i data-lucide="send" class="w-4 h-4"></i>
+                            送出通報並啟動 AI 資料庫比對
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- 分頁 3：AI 智慧媒合中心 (對應 Match_Records)              -->
+        <!-- ========================================================= -->
+        <section id="view-matches" class="hidden space-y-6">
+            <!-- 說明橫幅 -->
+            <div class="bg-gradient-to-r from-indigo-600 via-sky-600 to-cyan-600 rounded-2xl p-6 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="px-2.5 py-0.5 rounded-full bg-white/20 text-xs font-semibold backdrop-blur-sm">Match_Records 即時引擎</span>
+                        <h2 class="text-xl font-bold">AI 智慧失物媒合中心</h2>
+                    </div>
+                    <p class="text-sm text-sky-100 mt-1.5 max-w-2xl">
+                        系統自動針對「遺失通報 (Lost_Items)」與「拾獲登記 (Found_Items)」進行多維度向量比對，綜合評估物品類別、AI 辨識顏色、特徵標籤與地點鄰近度。
+                    </p>
+                </div>
+                <button onclick="recalculateMatches()" class="self-start md:self-center px-4 py-2.5 rounded-xl bg-white text-sky-700 font-semibold text-sm hover:bg-sky-50 transition flex items-center gap-2 shadow-sm shrink-0">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    重新掃描全庫比對
+                </button>
+            </div>
+
+            <!-- 媒合配對列表容器 -->
+            <div id="matches-list" class="space-y-5">
+                <!-- 由 JavaScript 動態渲染媒合配對卡片 -->
+            </div>
+
+            <!-- 無待處理媒合狀態 -->
+            <div id="matches-empty" class="hidden bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                <div class="w-16 h-16 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="check-circle" class="w-8 h-8"></i>
+                </div>
+                <h3 class="text-base font-semibold text-slate-800">目前沒有待確認的系統配對建議</h3>
+                <p class="text-sm text-slate-500 mt-1">當有新的遺失物或拾獲物登記時，AI 將自動在此為您配對高相似度案件。</p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 頁尾 -->
+    <footer class="bg-white border-t border-slate-200 mt-12 py-6">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs text-slate-500">
+            <div class="flex items-center gap-2">
+                <i data-lucide="radar" class="w-4 h-4 text-sky-600"></i>
+                <span>尋物雷達 - AI 智慧失物招領與物品辨識系統 (Frontend Prototype v1.0)</span>
+            </div>
+            <div>
+                資料表關聯架構：Users • Lost_Items • Found_Items • Item_Images • Locations • Match_Records
+            </div>
+        </div>
+    </footer>
+
+    <!-- ========================================================= -->
+    <!-- 彈窗 1：物品詳細資訊與聯絡視窗                             -->
+    <!-- ========================================================= -->
+    <div id="item-detail-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div class="relative h-60 bg-slate-100">
+                <img id="modal-img" src="" alt="物品照片" class="w-full h-full object-cover">
+                <button onclick="closeModal('item-detail-modal')" class="absolute top-3 right-3 w-9 h-9 rounded-full bg-slate-900/60 text-white hover:bg-slate-900 flex items-center justify-center transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+                <div id="modal-badge-container" class="absolute bottom-3 left-3 flex gap-2"></div>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <div class="flex items-center justify-between gap-2">
+                        <span id="modal-category" class="text-xs font-semibold text-sky-600 bg-sky-50 px-2.5 py-1 rounded-lg"></span>
+                        <span id="modal-id" class="text-xs text-slate-400 font-mono"></span>
+                    </div>
+                    <h3 id="modal-title" class="text-xl font-bold text-slate-900 mt-2"></h3>
+                </div>
+
+                <!-- AI 辨識標籤列 -->
+                <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                    <p class="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-sky-500"></i>
+                        AI 視覺辨識特徵向量 (Item_Images 分析結果)
+                    </p>
+                    <div id="modal-tags" class="flex flex-wrap gap-1.5"></div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div class="p-3 rounded-xl border border-slate-100 bg-slate-50/50">
+                        <span class="text-xs text-slate-400 block">地點 (Locations)</span>
+                        <span id="modal-location" class="font-medium text-slate-800"></span>
+                    </div>
+                    <div class="p-3 rounded-xl border border-slate-100 bg-slate-50/50">
+                        <span class="text-xs text-slate-400 block">通報時間</span>
+                        <span id="modal-time" class="font-medium text-slate-800"></span>
+                    </div>
+                </div>
+
+                <div>
+                    <span class="text-xs font-semibold text-slate-500 block mb-1">詳細描述與備註</span>
+                    <p id="modal-desc" class="text-sm text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-xl"></p>
+                </div>
+
+                <!-- 通報人資訊與複製聯絡方式 -->
+                <div class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <span class="text-xs text-slate-400 block">通報人資訊 (Users)</span>
+                        <span id="modal-user" class="text-sm font-semibold text-slate-800"></span>
+                    </div>
+                    <button id="modal-copy-btn" onclick="copyContactInfo()" class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium flex items-center justify-center gap-2 transition">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                        複製聯絡方式
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- 彈窗 2：前後端對接規格 (API Service & Schema 預覽)         -->
+    <!-- ========================================================= -->
+    <div id="api-spec-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-200">
+            <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
+                        <i data-lucide="server" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-base">前後端 API 對接設定與資料庫 Schema 對應</h3>
+                        <p class="text-xs text-slate-500">供後端組員串接 RESTful API 與資料表欄位對照</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('api-spec-modal')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto space-y-6 text-sm">
+                <!-- Mock 模式切換與 Base URL 設定 -->
+                <div class="bg-sky-50 border border-sky-200 rounded-xl p-4 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="font-bold text-slate-900">資料來源模式切換</span>
+                            <p class="text-xs text-slate-600">資料與媒合結果由後端資料庫提供。</p>
+                        </div>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="mock-mode-toggle" disabled onchange="toggleApiMode(this.checked)" class="sr-only peer">
+                            <div class="relative w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
+                            <span id="mock-mode-label" class="ms-2 text-xs font-bold text-sky-700">真實後端 API 模式</span>
+                        </label>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input type="text" id="api-base-url" value="/api" class="flex-1 px-3 py-1.5 text-xs font-mono bg-white border border-slate-300 rounded-lg" placeholder="輸入後端 API Base URL">
+                        <button onclick="saveApiConfig()" class="px-3 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg hover:bg-slate-700">儲存設定</button>
+                    </div>
+                </div>
+
+                <!-- API Endpoints 列表 -->
+                <div>
+                    <h4 class="font-bold text-slate-800 mb-2 flex items-center gap-1.5">
+                        <i data-lucide="webhook" class="w-4 h-4 text-indigo-600"></i>
+                        已封裝的 ApiService 端點規格 (4 大核心介面)
+                    </h4>
+                    <div class="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-200 text-xs">
+                        <div class="p-3 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                                <span class="px-2 py-0.5 rounded font-mono font-bold bg-emerald-100 text-emerald-700 mr-2">GET</span>
+                                <code class="font-mono font-semibold text-slate-800">/api/items</code>
+                                <p class="text-slate-500 mt-1">取得所有遺失物 (Lost_Items) 與拾獲物 (Found_Items) 列表，支援 type, category, location_id 篩選。</p>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                                <span class="px-2 py-0.5 rounded font-mono font-bold bg-sky-100 text-sky-700 mr-2">POST</span>
+                                <code class="font-mono font-semibold text-slate-800">/api/items</code>
+                                <p class="text-slate-500 mt-1">新增遺失或拾獲通報，同時寫入 Users、Locations 與 Item_Images 關聯。</p>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                                <span class="px-2 py-0.5 rounded font-mono font-bold bg-amber-100 text-amber-700 mr-2">POST</span>
+                                <code class="font-mono font-semibold text-slate-800">/api/ai-recognize</code>
+                                <p class="text-slate-500 mt-1">上傳圖片 Multipart/FormData，回傳 AI 辨識結果：{ category, color, tags[], confidence }。</p>
+                            </div>
+                        </div>
+                        <div class="p-3 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                                <span class="px-2 py-0.5 rounded font-mono font-bold bg-emerald-100 text-emerald-700 mr-2">GET</span>
+                                <code class="font-mono font-semibold text-slate-800">/api/matches</code>
+                                <p class="text-slate-500 mt-1">取得 Match_Records 系統自動媒合建議清單與相似度分數 (similarity_score)。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 資料庫 Schema JSON 範例 -->
+                <div>
+                    <h4 class="font-bold text-slate-800 mb-2 flex items-center gap-1.5">
+                        <i data-lucide="database" class="w-4 h-4 text-sky-600"></i>
+                        前端標準資料結構 Payload 範例 (對應 6 張資料表)
+                    </h4>
+                    <pre class="bg-slate-900 text-sky-300 p-4 rounded-xl text-xs font-mono overflow-x-auto leading-relaxed">{
+  "item_id": "LOST-1001",
+  "record_type": "LOST", // "LOST" (Lost_Items) | "FOUND" (Found_Items)
+  "status": "OPEN",      // "OPEN" | "MATCHED"
+  "title": "Apple AirPods Pro 2代 (附透明保護殼)",
+  "category": "3C電子",
+  "ai_features": {       // 來自 Item_Images AI 辨識結果
+    "detected_type": "無線藍牙耳機",
+    "primary_color": "白色",
+    "tags": ["白色充電盒", "透明保護殼", "藍色掛勾"],
+    "confidence": 0.96
+  },
+  "location": {          // 關聯 Locations 資料表
+    "location_id": 1,
+    "name": "圖書館",
+    "detail": "3樓數位學習區"
+  },
+  "user": {              // 關聯 Users 資料表
+    "user_id": "U01",
+    "name": "資工系 陳同學",
+    "contact": "Line: chen_dev99"
+  },
+  "created_at": "2026-11-17 14:30"
+}</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- JavaScript 邏輯層：模組化 API Service 與狀態管理           -->
+    <!-- ========================================================= -->
+    <script>
+        /**
+         * 1. SVG 內嵌圖示生成器 (確保離線或任何環境皆有清晰精緻的物品預覽圖，不依賴外部失效網址)
+         */
+        function createItemIllustration(bgColor, iconColor, label, subLabel) {
+            const svg = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+                <defs>
+                    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="${bgColor}" />
+                        <stop offset="100%" stop-color="#f8fafc" />
+                    </linearGradient>
+                </defs>
+                <rect width="600" height="400" fill="url(#g)" />
+                <circle cx="300" cy="175" r="72" fill="${iconColor}" fill-opacity="0.12" />
+                <circle cx="300" cy="175" r="52" fill="${iconColor}" fill-opacity="0.2" />
+                <text x="300" y="188" font-family="sans-serif" font-size="42" text-anchor="middle" fill="${iconColor}">${safeText(label)}</text>
+                <text x="300" y="285" font-family="sans-serif" font-size="22" font-weight="bold" text-anchor="middle" fill="#334155">${safeText(subLabel)}</text>
+                <text x="300" y="315" font-family="sans-serif" font-size="14" text-anchor="middle" fill="#64748b">AI 視覺特徵建檔影像</text>
+            </svg>`;
+            return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+        }
+
+        /**
+         * 2. 初始模擬資料庫 (對應 Users, Lost_Items, Found_Items, Item_Images, Locations, Match_Records)
+         */
+        const INITIAL_ITEMS = [
+            {
+                item_id: 'LOST-101',
+                record_type: 'LOST',
+                status: 'OPEN',
+                title: 'AirPods Pro 第二代無線耳機',
+                category: '3C電子',
+                color: '白色',
+                tags: ['白色充電盒', '透明防摔殼', '藍色小掛勾'],
+                location: '圖書館',
+                location_detail: '3樓自習室 A區',
+                datetime: '2026-11-17 15:20',
+                description: '昨天下午在圖書館3樓讀書離開時忘記帶走，充電盒外面有裝一個透明保護殼，旁邊扣著藍色登山扣。',
+                user_name: '資管系 林同學',
+                user_contact: 'Line: lin_0921',
+                image_url: createItemIllustration('#e0f2fe', '#0284c7', '🎧', 'AirPods Pro (白色/透明殼)')
+            },
+            {
+                item_id: 'FOUND-201',
+                record_type: 'FOUND',
+                status: 'OPEN',
+                title: '蘋果白色藍牙耳機 (附透明殼)',
+                category: '3C電子',
+                color: '白色',
+                tags: ['白色充電盒', '透明保護殼', '藍色掛勾'],
+                location: '圖書館',
+                location_detail: '3樓飲水機旁桌面',
+                datetime: '2026-11-17 17:05',
+                description: '在圖書館三樓桌上撿到的無線耳機，外殼是透明的還有一個藍色扣環，目前已交給一樓圖書館櫃檯保管。',
+                user_name: '圖書館工讀生 張同學',
+                user_contact: '圖書館 1F 服務台 (分機 2310)',
+                image_url: createItemIllustration('#dbeafe', '#2563eb', '🎧', '拾獲：白色無線耳機')
+            },
+            {
+                item_id: 'LOST-102',
+                record_type: 'LOST',
+                status: 'OPEN',
+                title: '黑色真皮短夾 (內含學生證)',
+                category: '證件錢包',
+                color: '黑色',
+                tags: ['黑色皮革', '對折短夾', '銀色拉鍊'],
+                location: '第一學生餐廳',
+                location_detail: '自助餐區座位',
+                datetime: '2026-11-18 08:30',
+                description: '早上買早餐時不小心掉在學餐椅子上，裡面有學生證、身分證與少量現金，非常急用！',
+                user_name: '電機系 陳同學',
+                user_contact: '0988-112-334',
+                image_url: createItemIllustration('#f1f5f9', '#334155', '👛', '黑色真皮短夾')
+            },
+            {
+                item_id: 'FOUND-202',
+                record_type: 'FOUND',
+                status: 'OPEN',
+                title: '深黑色皮革錢包',
+                category: '證件錢包',
+                color: '黑色',
+                tags: ['黑色皮革', '短夾', '證件夾層'],
+                location: '第一學生餐廳',
+                location_detail: '入口處回收餐盤區旁',
+                datetime: '2026-11-18 09:10',
+                description: '在學餐吃早餐時發現地面上有一個黑色皮夾，未翻動內部物品，已送至生輔組失物招領處。',
+                user_name: '熱心同學 吳小姐',
+                user_contact: 'Line: wu_campus88',
+                image_url: createItemIllustration('#e2e8f0', '#1e293b', '👛', '拾獲：黑色皮革錢包')
+            },
+            {
+                item_id: 'LOST-103',
+                record_type: 'LOST',
+                status: 'OPEN',
+                title: '羅技 MX Master 3S 無線滑鼠',
+                category: '3C電子',
+                color: '石墨灰',
+                tags: ['人體工學滑鼠', '深灰色', '雙滾輪'],
+                location: '綜合教學大樓',
+                location_detail: '402 電腦教室',
+                datetime: '2026-11-16 16:40',
+                description: '上完程式設計課忘記把滑鼠收進包包，滑鼠底部有貼一張小小的綠色圓形貼紙。',
+                user_name: '資工系 黃同學',
+                user_contact: 'Email: huang@campus.edu.tw',
+                image_url: createItemIllustration('#f3e8ff', '#7e22ce', '🖱️', '羅技無線滑鼠 (石墨灰)')
+            },
+            {
+                item_id: 'FOUND-203',
+                record_type: 'FOUND',
+                status: 'OPEN',
+                title: 'Gogoro 感應鑰匙與黃色小鴨吊飾',
+                category: '鑰匙配件',
+                color: '黑色',
+                tags: ['圓形感應鑰匙', '黃色吊飾', '銀色鑰匙圈'],
+                location: '學生活動中心',
+                location_detail: '1樓社團辦公室走廊',
+                datetime: '2026-11-17 19:20',
+                description: '在活動中心一樓走廊地上撿到一串機車鑰匙，上面有一個很顯眼的黃色小鴨公仔吊飾。',
+                user_name: '學生會值班人員',
+                user_contact: '活動中心 2F 學生會辦公室',
+                image_url: createItemIllustration('#fef9c3', '#ca8a04', '🔑', '感應鑰匙 + 黃色吊飾')
+            },
+            {
+                item_id: 'FOUND-204',
+                record_type: 'FOUND',
+                status: 'OPEN',
+                title: '象印保溫瓶 500ml (海軍藍)',
+                category: '隨身衣物',
+                color: '深藍色',
+                tags: ['不鏽鋼保溫瓶', '深藍色瓶身', '彈蓋設計'],
+                location: '體育館',
+                location_detail: '籃球場旁觀眾席',
+                datetime: '2026-11-17 21:00',
+                description: '晚上打完系籃在看台區發現的深藍色保溫瓶，瓶身有些微使用痕跡。',
+                user_name: '體育室管理員',
+                user_contact: '體育館 1F 器材室',
+                image_url: createItemIllustration('#e0e7ff', '#4338ca', '🧴', '深藍色保溫瓶 500ml')
+            },
+            {
+                item_id: 'LOST-104',
+                record_type: 'LOST',
+                status: 'MATCHED',
+                title: '卡西歐工程計算機 fx-991ES',
+                category: '其他',
+                color: '銀灰色',
+                tags: ['工程計算機', '銀色外殼', '滑蓋保護殼'],
+                location: '綜合教學大樓',
+                location_detail: '205 階梯教室',
+                datetime: '2026-11-15 12:10',
+                description: '考完微積分忘在抽屜裡，背面有寫學號末三碼 412。（已透過尋物雷達成功找回！）',
+                user_name: '機械系 趙同學',
+                user_contact: '已結案隱藏聯絡資訊',
+                image_url: createItemIllustration('#dcfce7', '#15803d', '🖩', '工程計算機 (已尋獲)')
+            }
+        ];
+
+        /**
+         * 3. 模組化前後端 API Service 層 (方便組員直接替換成真實後端 fetch 呼叫)
+         */
+        async function rasterImage(value) {
+            if (!value || !value.startsWith('data:image/svg')) return value;
+            return new Promise((resolve, reject) => {
+                const image = new Image();
+                image.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = image.naturalWidth || 640;
+                    canvas.height = image.naturalHeight || 480;
+                    canvas.getContext('2d').drawImage(image, 0, 0);
+                    resolve(canvas.toDataURL('image/png'));
+                };
+                image.onerror = () => reject(new Error('示範圖片無法載入'));
+                image.src = value;
+            });
+        }
+        function safeText(value) {
+            return String(value ?? '').replace(/[&<>"']/g, character => ({
+                '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+            }[character]));
+        }
+        async function backendRequest(path, method = 'GET', body) {
+            const response = await fetch(ApiService.baseUrl + path, {
+                method,
+                headers: body ? {'Content-Type': 'application/json'} : {},
+                body: body ? JSON.stringify(body) : undefined
+            });
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                throw new Error(typeof payload.detail === 'string' ? payload.detail : '操作失敗，請確認後端服務與輸入內容');
+            }
+            return response.status === 204 ? null : response.json();
+        }
+        const ApiService = {
+            useMock: false,
+            baseUrl: '/api',
+            async getItems() {
+                const items = await backendRequest('/items');
+                return items.map(item => ({...item, image_url: item.image_url || createItemIllustration('#f1f5f9', '#475569', '📦', item.title)}));
+            },
+            async createItem(payload) { return backendRequest('/items', 'POST', {...payload, image_url: await rasterImage(payload.image_url)}); },
+            async recognizeImage(image) { return backendRequest('/ai-recognize', 'POST', {image: await rasterImage(image)}); },
+            calculateMatches() { return appState.matches || []; }
+        };
+        window.addEventListener('unhandledrejection', event => {
+            showToast(event.reason?.message || '操作失敗，請稍後再試', 'error');
+            event.preventDefault();
+        });
+
+        let appState = {
+            items: [],
+            matches: [],
+            dismissedMatches: [],
+            filterType: 'ALL',
+            currentUploadedImage: '',
+            currentPresetType: null,
+            activeContactText: ''
+        };
+
+        /**
+         * 5. 初始化與事件綁定
+         */
+        window.addEventListener('DOMContentLoaded', async () => {
+            lucide.createIcons();
+            for (const id of ['item-title', 'item-category', 'item-color', 'item-tags', 'item-description']) {
+                document.getElementById(id).addEventListener('input', event => {
+                    event.target.dataset.edited = 'true';
+                });
+            }
+            // 設定表單預設時間為現在
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('item-datetime').value = now.toISOString().slice(0, 16);
+
+            await refreshAllData();
+        });
+
+        async function refreshAllData() {
+            appState.items = await ApiService.getItems();
+            appState.matches = await backendRequest('/matches');
+            const selector = document.getElementById('filter-category');
+            for (const item of appState.items) {
+                if (!Array.from(selector.options).some(option => option.value === item.category)) {
+                    selector.add(new Option(item.category, item.category));
+                }
+            }
+            updateStatistics();
+            renderItemsGrid();
+            renderMatchesList();
+            lucide.createIcons();
+        }
+
+        /**
+         * 6. 頁面分頁切換邏輯
+         */
+        function switchTab(tabName) {
+            const views = ['hall', 'report', 'matches'];
+            views.forEach(v => {
+                document.getElementById(`view-${v}`).classList.add('hidden');
+                // 桌面按鈕樣式重設
+                const navBtn = document.getElementById(`nav-${v}`);
+                if (navBtn) {
+                    navBtn.classList.remove('text-sky-600', 'bg-sky-50');
+                    navBtn.classList.add('text-slate-600');
+                }
+                // 手機按鈕樣式重設
+                const mNavBtn = document.getElementById(`m-nav-${v}`);
+                if (mNavBtn) {
+                    mNavBtn.classList.remove('text-sky-600', 'border-b-2', 'border-sky-600');
+                    mNavBtn.classList.add('text-slate-500');
+                }
+            });
+
+            // 顯示目標分頁
+            document.getElementById(`view-${tabName}`).classList.remove('hidden');
+
+            const activeNav = document.getElementById(`nav-${tabName}`);
+            if (activeNav) {
+                activeNav.classList.remove('text-slate-600');
+                activeNav.classList.add('text-sky-600', 'bg-sky-50');
+            }
+            const activeMNav = document.getElementById(`m-nav-${tabName}`);
+            if (activeMNav) {
+                activeMNav.classList.remove('text-slate-500');
+                activeMNav.classList.add('text-sky-600', 'border-b-2', 'border-sky-600');
+            }
+
+            lucide.createIcons();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        /**
+         * 7. 更新頂部統計數據與媒合徽章
+         */
+        function updateStatistics() {
+            const lostOpen = appState.items.filter(i => i.record_type === 'LOST' && i.status === 'OPEN').length;
+            const foundOpen = appState.items.filter(i => i.record_type === 'FOUND' && i.status === 'OPEN').length;
+            const matchedCount = appState.items.filter(i => i.status === 'MATCHED').length;
+
+            document.getElementById('stat-lost').textContent = lostOpen;
+            document.getElementById('stat-found').textContent = foundOpen;
+            document.getElementById('stat-matched').textContent = matchedCount;
+
+            const matches = ApiService.calculateMatches(appState.items, appState.dismissedMatches);
+            const badge = document.getElementById('match-badge');
+            const mBadge = document.getElementById('m-match-badge');
+            badge.textContent = matches.length;
+            mBadge.textContent = matches.length;
+            badge.classList.toggle('hidden', matches.length === 0);
+            mBadge.classList.toggle('hidden', matches.length === 0);
+        }
+
+        /**
+         * 8. 失物大廳：篩選與卡片渲染
+         */
+        function setFilterType(type) {
+            appState.filterType = type;
+            ['ALL', 'LOST', 'FOUND'].forEach(t => {
+                const btn = document.getElementById(`filter-type-${t}`);
+                if (t === type) {
+                    btn.className = 'type-pill px-4 py-1.5 rounded-lg text-sm font-medium bg-white text-slate-900 shadow-sm transition';
+                } else {
+                    btn.className = 'type-pill px-4 py-1.5 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 transition';
+                }
+            });
+            renderItemsGrid();
+        }
+
+        function resetFilters() {
+            appState.filterType = 'ALL';
+            setFilterType('ALL');
+            document.getElementById('search-keyword').value = '';
+            document.getElementById('filter-category').value = 'ALL';
+            document.getElementById('filter-location').value = 'ALL';
+            renderItemsGrid();
+        }
+
+        function renderItemsGrid() {
+            const keyword = document.getElementById('search-keyword').value.trim().toLowerCase();
+            const category = document.getElementById('filter-category').value;
+            const location = document.getElementById('filter-location').value;
+
+            const filtered = appState.items.filter(item => {
+                if (appState.filterType !== 'ALL' && item.record_type !== appState.filterType) return false;
+                if (category !== 'ALL' && item.category !== category) return false;
+                if (location !== 'ALL' && item.location !== location) return false;
+                if (keyword) {
+                    const searchPool = `${safeText(item.title)} ${safeText(item.color)} ${safeText(item.location)} ${safeText(item.description)} ${item.tags.join(' ')}`.toLowerCase();
+                    if (!searchPool.includes(keyword)) return false;
+                }
+                return true;
+            });
+
+            const grid = document.getElementById('items-grid');
+            const emptyState = document.getElementById('empty-state');
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            grid.innerHTML = filtered.map(item => {
+                const isLost = item.record_type === 'LOST';
+                const isMatched = item.status === 'MATCHED';
+
+                let statusBadge = '';
+                if (isMatched) {
+                    statusBadge = `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500 text-white shadow-sm flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> 已媒合結案</span>`;
+                } else if (isLost) {
+                    statusBadge = `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500 text-white shadow-sm">遺失協尋中</span>`;
+                } else {
+                    statusBadge = `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-sky-500 text-white shadow-sm">拾獲待認領</span>`;
+                }
+
+                const tagsHtml = item.tags.slice(0, 3).map(tag =>
+                    `<span class="text-[11px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium">#${safeText(tag)}</span>`
+                ).join('');
+
+                return `
+                <div onclick="openItemDetail('${item.item_id}')" class="group bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-sm hover:shadow-md hover:border-sky-300 transition cursor-pointer flex flex-col">
+                    <div class="relative h-44 bg-slate-100 overflow-hidden">
+                        <img src="${item.image_url}" alt="${safeText(item.title)}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                        <div class="absolute top-3 left-3">
+                            ${statusBadge}
+                        </div>
+                        <span class="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-900/70 text-white backdrop-blur-sm">
+                            ${safeText(item.category)}
+                        </span>
+                    </div>
+                    <div class="p-4 flex-1 flex flex-col justify-between space-y-3">
+                        <div>
+                            <div class="flex items-center justify-between gap-2 text-xs text-slate-400 mb-1">
+                                <span class="flex items-center gap-1 text-slate-600 font-medium">
+                                    <i data-lucide="map-pin" class="w-3.5 h-3.5 text-sky-500"></i>
+                                    ${safeText(item.location)}
+                                </span>
+                                <span>${item.datetime.split(' ')[0]}</span>
+                            </div>
+                            <h3 class="font-bold text-slate-900 text-base line-clamp-1 group-hover:text-sky-600 transition">${safeText(item.title)}</h3>
+                            <p class="text-xs text-slate-500 mt-1 line-clamp-2">${safeText(item.description || '無額外補充描述')}</p>
+                        </div>
+
+                        <div class="pt-2 border-t border-slate-100">
+                            <div class="flex items-center gap-1 text-[11px] text-sky-600 font-medium mb-1.5">
+                                <i data-lucide="sparkles" class="w-3 h-3"></i>
+                                <span>AI 辨識色系：${safeText(item.color)}</span>
+                            </div>
+                            <div class="flex flex-wrap gap-1">
+                                ${tagsHtml}
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        /**
+         * 9. 登記通報表單與 AI 智慧辨識模擬互動
+         */
+        function setReportMode(mode) {
+            document.getElementById('report-type').value = mode;
+            const btnLost = document.getElementById('btn-mode-LOST');
+            const btnFound = document.getElementById('btn-mode-FOUND');
+            const labelLoc = document.getElementById('label-location');
+            const labelTime = document.getElementById('label-datetime');
+
+            if (mode === 'LOST') {
+                btnLost.className = 'py-2.5 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-rose-500 text-white shadow-lg shadow-rose-500/30 transition';
+                btnFound.className = 'py-2.5 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-white/10 text-slate-200 hover:bg-white/20 transition';
+                labelLoc.innerHTML = '遺失地點 (Locations) <span class="text-rose-500">*</span>';
+                labelTime.innerHTML = '遺失日期時間 <span class="text-rose-500">*</span>';
+            } else {
+                btnFound.className = 'py-2.5 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-sky-500 text-white shadow-lg shadow-sky-500/30 transition';
+                btnLost.className = 'py-2.5 px-4 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 bg-white/10 text-slate-200 hover:bg-white/20 transition';
+                labelLoc.innerHTML = '拾獲地點 (Locations) <span class="text-rose-500">*</span>';
+                labelTime.innerHTML = '拾獲日期時間 <span class="text-rose-500">*</span>';
+            }
+        }
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                appState.currentUploadedImage = e.target.result;
+                appState.currentPresetType = null;
+                showImagePreview(e.target.result);
+                showToast('圖片已載入，請點擊「執行 AI 智慧辨識特徵」', 'info');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function loadDemoImage(preset) {
+            appState.currentPresetType = preset;
+            if (preset === 'earbuds') {
+                appState.currentUploadedImage = createItemIllustration('#e0f2fe', '#0284c7', '🎧', '待辨識：白色藍牙耳機');
+            } else {
+                appState.currentUploadedImage = createItemIllustration('#e2e8f0', '#1e293b', '👛', '待辨識：黑色皮革短夾');
+            }
+            showImagePreview(appState.currentUploadedImage);
+            runAiRecognition();
+        }
+
+        function showImagePreview(src) {
+            const preview = document.getElementById('image-preview');
+            const placeholder = document.getElementById('upload-placeholder');
+            preview.src = src;
+            preview.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+        }
+
+        async function runAiRecognition() {
+            if (!appState.currentUploadedImage) {
+                showToast('請先上傳物品照片', 'warning');
+                return;
+            }
+            const button = document.getElementById('btn-run-ai');
+            if (button.disabled) return;
+            const overlay = document.getElementById('ai-scanning-overlay');
+            const badge = document.getElementById('ai-status-badge');
+            const summary = document.getElementById('ai-confidence-text');
+            const image = appState.currentUploadedImage;
+            const fields = ['item-title', 'item-category', 'item-color', 'item-tags', 'item-description'];
+            const initial = Object.fromEntries(fields.map(id => [id, document.getElementById(id).value]));
+            button.disabled = true;
+            overlay.classList.remove('hidden');
+            badge.textContent = 'AI 分析中…';
+            badge.className = 'px-2 py-0.5 rounded-full bg-amber-100 text-amber-700';
+            try {
+                const result = await ApiService.recognizeImage(image);
+                if (image !== appState.currentUploadedImage) {
+                    badge.textContent = '照片已更換，請重新辨識';
+                    return;
+                }
+                const values = {
+                    'item-title': result.title, 'item-category': result.category,
+                    'item-color': result.color, 'item-tags': result.tags.join(', '),
+                    'item-description': result.description
+                };
+                for (const id of fields) {
+                    const field = document.getElementById(id);
+                    if (field.value !== initial[id] || field.dataset.edited === 'true') continue;
+                    if (id !== 'item-category' && field.value.trim()) continue;
+                    if (id === 'item-category' && !Array.from(field.options).some(option => option.value === result.category)) {
+                        field.add(new Option(result.category, result.category));
+                    }
+                    field.value = values[id] || '';
+                }
+                badge.textContent = result.needs_review ? '辨識完成，請人工確認' : '辨識完成';
+                badge.className = 'px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700';
+                summary.textContent = '模型自評信心 ' + Math.round(result.confidence * 100) +
+                    '%。已填入可辨識的資訊，送出前請確認。' +
+                    (result.needs_review ? '此圖片需要人工檢查。' : '');
+                const tags = document.getElementById('ai-tags-preview');
+                tags.replaceChildren(...result.tags.map(tag => {
+                    const element = document.createElement('span');
+                    element.className = 'px-2 py-0.5 rounded-md bg-sky-100 text-sky-700';
+                    element.textContent = '#' + tag;
+                    return element;
+                }));
+                showToast('物品描述完成，請確認表單內容', 'success');
+            } catch (error) {
+                badge.textContent = '辨識失敗，可重試';
+                badge.className = 'px-2 py-0.5 rounded-full bg-rose-100 text-rose-700';
+                summary.textContent = error.message;
+                showToast(error.message, 'error');
+            } finally {
+                overlay.classList.add('hidden');
+                button.disabled = false;
+            }
+        }
+
+        async function handleReportSubmit(event) {
+            event.preventDefault();
+
+            const recordType = document.getElementById('report-type').value;
+            const title = document.getElementById('item-title').value.trim();
+            const category = document.getElementById('item-category').value;
+            const color = document.getElementById('item-color').value.trim();
+            const rawTags = document.getElementById('item-tags').value;
+            const tags = rawTags ? rawTags.split(/[,，]/).map(t => t.trim()).filter(Boolean) : [category, color];
+            const location = document.getElementById('item-location').value;
+            const locationDetail = document.getElementById('item-location-detail').value.trim();
+            const datetime = document.getElementById('item-datetime').value.replace('T', ' ');
+            const description = document.getElementById('item-description').value.trim();
+            const userName = document.getElementById('user-name').value.trim();
+            const userContact = document.getElementById('user-contact').value.trim();
+
+            const newId = `${recordType}-${Math.floor(300 + Math.random() * 699)}`;
+            const imageUrl = appState.currentUploadedImage || '';
+
+            const payload = {
+                item_id: newId,
+                record_type: recordType,
+                status: 'OPEN',
+                title,
+                category,
+                color,
+                tags,
+                location,
+                location_detail: locationDetail,
+                datetime,
+                description,
+                user_name: userName,
+                user_contact: userContact,
+                image_url: imageUrl
+            };
+
+            const created = await ApiService.createItem(payload);
+            await refreshAllData();
+
+            // 重設表單與圖片預覽
+            document.getElementById('report-form').reset();
+            document.querySelectorAll('#report-form [data-edited]').forEach(field => delete field.dataset.edited);
+            appState.currentUploadedImage = '';
+            appState.currentPresetType = null;
+            document.getElementById('image-preview').classList.add('hidden');
+            document.getElementById('upload-placeholder').classList.remove('hidden');
+            document.getElementById('ai-status-badge').textContent = '尚未執行辨識';
+            document.getElementById('ai-tags-preview').innerHTML = '';
+
+            // 檢查是否觸發了新的 AI 媒合
+            const matches = ApiService.calculateMatches(appState.items, appState.dismissedMatches);
+            const hasNewMatch = matches.some(m => m.lost_item.item_id === created.item_id || m.found_item.item_id === created.item_id);
+
+            if (hasNewMatch) {
+                showToast('登記成功！AI 系統偵測到高相似度配對，已為您跳轉至媒合中心！', 'success');
+                switchTab('matches');
+            } else {
+                showToast('通報登記成功！已同步更新至失物大廳資料庫。', 'success');
+                switchTab('hall');
+            }
+        }
+
+        /**
+         * 10. AI 智慧媒合中心渲染與互動
+         */
+        function renderMatchesList() {
+            const matches = ApiService.calculateMatches(appState.items, appState.dismissedMatches);
+            const container = document.getElementById('matches-list');
+            const emptyBox = document.getElementById('matches-empty');
+
+            if (matches.length === 0) {
+                container.innerHTML = '';
+                emptyBox.classList.remove('hidden');
+                return;
+            }
+
+            emptyBox.classList.add('hidden');
+            container.innerHTML = matches.map(m => {
+                const { lost_item: lost, found_item: found, similarity, reasons, match_id } = m;
+                const badgeColor = similarity >= 85 ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white';
+
+                return `
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <!-- 配對卡片頂部相似度橫幅 -->
+                    <div class="px-5 py-3 bg-slate-50 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2.5">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold ${badgeColor} flex items-center gap-1 shadow-sm">
+                                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                                AI 綜合相似度 ${similarity}%
+                            </span>
+                            <span class="text-xs font-mono text-slate-400">配對編號: ${match_id}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5">
+                            ${reasons.map(r => `<span class="text-xs px-2.5 py-0.5 rounded-md bg-sky-100/80 text-sky-800 font-medium">✓ ${safeText(r)}</span>`).join('')}
+                        </div>
+                    </div>
+
+                    <!-- 左右並排比對區 -->
+                    <div class="p-5 grid grid-cols-1 lg:grid-cols-11 gap-4 items-center">
+                        <!-- 左側：遺失通報 (Lost_Items) -->
+                        <div class="lg:col-span-5 p-4 rounded-xl border border-rose-200/80 bg-rose-50/30 flex gap-3.5">
+                            <img src="${lost.image_url}" alt="${safeText(lost.title)}" class="w-20 h-20 rounded-xl object-cover shrink-0 border border-slate-200 bg-white">
+                            <div class="min-w-0 flex-1">
+                                <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-700">遺失通報 (${lost.item_id})</span>
+                                <h4 class="font-bold text-slate-900 text-sm mt-1 truncate">${safeText(lost.title)}</h4>
+                                <p class="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                    <i data-lucide="map-pin" class="w-3 h-3 text-rose-500"></i> ${safeText(lost.location)} (${safeText(lost.location_detail || '未註明')})
+                                </p>
+                                <p class="text-xs text-slate-500 mt-0.5">失主：${safeText(lost.user_name)}</p>
+                            </div>
+                        </div>
+
+                        <!-- 中間連接圖示 -->
+                        <div class="lg:col-span-1 flex justify-center">
+                            <div class="w-10 h-10 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center font-bold shadow-inner">
+                                <i data-lucide="arrow-left-right" class="w-5 h-5"></i>
+                            </div>
+                        </div>
+
+                        <!-- 右側：拾獲登記 (Found_Items) -->
+                        <div class="lg:col-span-5 p-4 rounded-xl border border-sky-200/80 bg-sky-50/30 flex gap-3.5">
+                            <img src="${found.image_url}" alt="${safeText(found.title)}" class="w-20 h-20 rounded-xl object-cover shrink-0 border border-slate-200 bg-white">
+                            <div class="min-w-0 flex-1">
+                                <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-sky-100 text-sky-700">拾獲招領 (${found.item_id})</span>
+                                <h4 class="font-bold text-slate-900 text-sm mt-1 truncate">${safeText(found.title)}</h4>
+                                <p class="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                    <i data-lucide="map-pin" class="w-3 h-3 text-sky-500"></i> ${safeText(found.location)} (${safeText(found.location_detail || '未註明')})
+                                </p>
+                                <p class="text-xs text-slate-500 mt-0.5">拾獲人/保管處：${safeText(found.user_name)}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 底部操作按鈕 -->
+                    <div class="px-5 py-3 bg-slate-50/60 border-t border-slate-100 flex flex-wrap items-center justify-end gap-3">
+                        <button onclick="dismissMatch('${match_id}')" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold transition">
+                            排除此配對
+                        </button>
+                        <button onclick="confirmMatch('${lost.item_id}', '${found.item_id}')" class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 transition">
+                            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                            確認媒合成功並通知失主
+                        </button>
+                    </div>
+                </div>`;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        async function confirmMatch(lostId, foundId) {
+            await backendRequest('/matches/confirm', 'POST', {lost_id: lostId, found_id: foundId});
+            await refreshAllData();
+            showToast('已確認媒合結案，資料庫狀態已更新。', 'success');
+        }
+        async function dismissMatch(matchId) {
+            const match = appState.matches.find(entry => entry.match_id === matchId);
+            if (!match) return;
+            await backendRequest('/matches/dismiss', 'POST', {
+                lost_id: match.lost_item.item_id, found_id: match.found_item.item_id
+            });
+            await refreshAllData();
+            showToast('已排除該筆配對建議', 'info');
+        }
+        async function recalculateMatches() {
+            await backendRequest('/matches/dismissed', 'DELETE');
+            await refreshAllData();
+            showToast('已重新查詢資料庫配對，未完成的圖片請稍後再試。', 'success');
+        }
+
+        /**
+         * 11. 彈窗與輔助功能 (物品詳情、API 規格視窗、剪貼簿複製、Toast 訊息)
+         */
+        function openItemDetail(itemId) {
+            const item = appState.items.find(i => i.item_id === itemId);
+            if (!item) return;
+
+            document.getElementById('modal-img').src = item.image_url;
+            document.getElementById('modal-category').textContent = item.category;
+            document.getElementById('modal-id').textContent = `ID: ${item.item_id}`;
+            document.getElementById('modal-title').textContent = item.title;
+            document.getElementById('modal-location').textContent = `${safeText(item.location)} ${item.location_detail ? '· ' + item.location_detail : ''}`;
+            document.getElementById('modal-time').textContent = item.datetime;
+            document.getElementById('modal-desc').textContent = item.description || '無額外補充說明';
+            document.getElementById('modal-user').textContent = `${item.user_name} (${item.user_contact})`;
+
+            appState.activeContactText = `${item.user_name} - ${item.user_contact}`;
+
+            const badgeContainer = document.getElementById('modal-badge-container');
+            if (item.status === 'MATCHED') {
+                badgeContainer.innerHTML = `<span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500 text-white shadow">已媒合結案</span>`;
+            } else if (item.record_type === 'LOST') {
+                badgeContainer.innerHTML = `<span class="px-3 py-1 rounded-full text-xs font-bold bg-rose-500 text-white shadow">遺失協尋中</span>`;
+            } else {
+                badgeContainer.innerHTML = `<span class="px-3 py-1 rounded-full text-xs font-bold bg-sky-500 text-white shadow">拾獲待認領</span>`;
+            }
+
+            document.getElementById('modal-tags').innerHTML = [
+                `<span class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-100 text-indigo-700">主色調：${safeText(item.color)}</span>`,
+                ...item.tags.map(t => `<span class="px-2.5 py-1 rounded-lg text-xs font-medium bg-white border border-slate-200 text-slate-700">#${t}</span>`)
+            ].join('');
+
+            document.getElementById('item-detail-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function copyContactInfo() {
+            const tempInput = document.createElement('input');
+            tempInput.value = appState.activeContactText;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            showToast(`已複製聯絡資訊：${appState.activeContactText}`, 'success');
+        }
+
+        function openApiModal() {
+            document.getElementById('api-spec-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        function toggleApiMode(isMock) {
+            ApiService.useMock = false;
+            if (isMock) { showToast('目前使用真實後端資料', 'info'); return; }
+            const label = document.getElementById('mock-mode-label');
+            const dot = document.getElementById('api-status-dot');
+            if (isMock) {
+                label.textContent = '真實後端 API 模式';
+                label.className = 'ms-2 text-xs font-bold text-sky-700';
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+                showToast('已切換至內建 Mock 假資料模式', 'info');
+            } else {
+                label.textContent = '真實後端 API 模式';
+                label.className = 'ms-2 text-xs font-bold text-indigo-700';
+                dot.className = 'w-2 h-2 rounded-full bg-indigo-500 animate-pulse';
+                showToast('已切換為真實後端 API 連線模式，請確認後端伺服器已啟動', 'warning');
+            }
+        }
+
+        function saveApiConfig() {
+            ApiService.baseUrl = document.getElementById('api-base-url').value.trim();
+            showToast(`已更新後端 API 網址為：${ApiService.baseUrl}`, 'success');
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = {
+                success: 'bg-emerald-600 text-white',
+                warning: 'bg-amber-600 text-white',
+                info: 'bg-slate-800 text-white'
+            };
+            toast.className = `${colors[type] || colors.info} px-4 py-3 rounded-xl shadow-lg text-xs sm:text-sm font-medium flex items-center gap-2 pointer-events-auto transition-all duration-300 transform translate-y-2 opacity-0`;
+            toast.innerHTML = `<span>${safeText(message)}</span>`;
+            container.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3200);
+        }
+    </script>
+</body>
+</html>
