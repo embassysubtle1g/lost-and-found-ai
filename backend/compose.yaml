@@ -34,7 +34,18 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - model_cache:/root/.cache/huggingface
+  language-ai:
+    profiles: ["language"]
+    build: ../services/lost-and-found-language-ai
+    environment:
+      DEVICE: cpu
+      LOAD_IN_4BIT: "false"
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - language_model_cache:/root/.cache/huggingface
 volumes:
+  language_model_cache:
   model_cache:
   postgres_data:
   image_data:

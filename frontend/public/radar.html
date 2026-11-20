@@ -264,7 +264,7 @@
                         <i data-lucide="scan-line" class="w-6 h-6 text-sky-400"></i>
                         登記失物 / 拾獲通報
                     </h2>
-                    <p class="text-sm text-slate-300 mt-1">上傳物品照片，擷取圖片特徵向量並比對資料庫；物品資訊可手動填寫。</p>
+                    <p class="text-sm text-slate-300 mt-1">上傳物品照片，自動產生名稱、分類與外觀描述，確認後登記並進行圖片比對。</p>
 
                     <!-- 切換報失 / 拾獲 -->
                     <div class="grid grid-cols-2 gap-3 mt-5 max-w-md">
@@ -290,7 +290,7 @@
                                     <i data-lucide="cpu" class="w-4 h-4 text-sky-600"></i>
                                     AI 影像辨識與特徵提取 (Item_Images)
                                 </h3>
-                                <p class="text-xs text-slate-500">上傳照片後擷取圖片特徵；物品種類、顏色與標籤請手動確認</p>
+                                <p class="text-xs text-slate-500">語言 AI 提供物品描述與分類，DINOv2 提供圖片比對特徵</p>
                             </div>
                             <!-- 快速套用測試圖片按鈕（方便課堂 Demo） -->
                             <div class="flex items-center gap-1.5">
@@ -338,7 +338,7 @@
                                         <span class="font-semibold text-slate-700">AI 辨識狀態：</span>
                                         <span id="ai-status-badge" class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">尚未執行辨識</span>
                                     </div>
-                                    <p id="ai-confidence-text" class="text-slate-500">上傳照片並點擊上方按鈕，擷取圖片向量供資料庫比對。</p>
+                                    <p id="ai-confidence-text" class="text-slate-500">上傳照片並點擊辨識，自動填入物品資訊；模型無法確認的細節請自行核對。</p>
                                     <div id="ai-tags-preview" class="flex flex-wrap gap-1.5 pt-1"></div>
                                 </div>
                             </div>
@@ -882,6 +882,11 @@
          */
         window.addEventListener('DOMContentLoaded', async () => {
             lucide.createIcons();
+            for (const id of ['item-title', 'item-category', 'item-color', 'item-tags', 'item-description']) {
+                document.getElementById(id).addEventListener('input', event => {
+                    event.target.dataset.edited = 'true';
+                });
+            }
             // 設定表單預設時間為現在
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -893,6 +898,12 @@
         async function refreshAllData() {
             appState.items = await ApiService.getItems();
             appState.matches = await backendRequest('/matches');
+            const selector = document.getElementById('filter-category');
+            for (const item of appState.items) {
+                if (!Array.from(selector.options).some(option => option.value === item.category)) {
+                    selector.add(new Option(item.category, item.category));
+                }
+            }
             updateStatistics();
             renderItemsGrid();
             renderMatchesList();
@@ -1125,45 +1136,62 @@
 
         async function runAiRecognition() {
             if (!appState.currentUploadedImage) {
-                showToast('請先上傳物品照片，或點擊右上角「Demo 範例圖」測試！', 'warning');
+                showToast('請先上傳物品照片', 'warning');
                 return;
             }
-
+            const button = document.getElementById('btn-run-ai');
+            if (button.disabled) return;
             const overlay = document.getElementById('ai-scanning-overlay');
-            const statusBadge = document.getElementById('ai-status-badge');
+            const badge = document.getElementById('ai-status-badge');
+            const summary = document.getElementById('ai-confidence-text');
+            const image = appState.currentUploadedImage;
+            const fields = ['item-title', 'item-category', 'item-color', 'item-tags', 'item-description'];
+            const initial = Object.fromEntries(fields.map(id => [id, document.getElementById(id).value]));
+            button.disabled = true;
             overlay.classList.remove('hidden');
-            statusBadge.textContent = 'AI 分析中...';
-            statusBadge.className = 'px-2 py-0.5 rounded-full bg-amber-100 text-amber-700';
-
+            badge.textContent = 'AI 分析中…';
+            badge.className = 'px-2 py-0.5 rounded-full bg-amber-100 text-amber-700';
             try {
-                const result = await ApiService.recognizeImage(appState.currentUploadedImage, appState.currentPresetType);
-
-                if (result.embedding_ready) {
-                    statusBadge.textContent = '圖片特徵已擷取';
-                    statusBadge.className = 'px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700';
-                    document.getElementById('ai-confidence-text').textContent = result.message;
-                    showToast(result.message, 'success');
+                const result = await ApiService.recognizeImage(image);
+                if (image !== appState.currentUploadedImage) {
+                    badge.textContent = '照片已更換，請重新辨識';
                     return;
                 }
-                // 自動填入表單欄位
-                if (!document.getElementById('item-title').value || appState.currentPresetType) {
-                    document.getElementById('item-title').value = result.title;
+                const values = {
+                    'item-title': result.title, 'item-category': result.category,
+                    'item-color': result.color, 'item-tags': result.tags.join(', '),
+                    'item-description': result.description
+                };
+                for (const id of fields) {
+                    const field = document.getElementById(id);
+                    if (field.value !== initial[id] || field.dataset.edited === 'true') continue;
+                    if (id !== 'item-category' && field.value.trim()) continue;
+                    if (id === 'item-category' && !Array.from(field.options).some(option => option.value === result.category)) {
+                        field.add(new Option(result.category, result.category));
+                    }
+                    field.value = values[id] || '';
                 }
-                document.getElementById('item-category').value = result.category;
-                document.getElementById('item-color').value = result.color;
-                document.getElementById('item-tags').value = result.tags.join(', ');
-
-                // 更新 AI 結果框 UI
-                statusBadge.textContent = `辨識完成 (信心度 ${Math.round(result.confidence * 100)}%)`;
-                statusBadge.className = 'px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold';
-                document.getElementById('ai-confidence-text').textContent = `系統已自動識別類別為「${result.category}」、主色調「${result.color}」，並填入下方特徵標籤。`;
-                document.getElementById('ai-tags-preview').innerHTML = result.tags.map(t =>
-                    `<span class="px-2 py-0.5 rounded-md bg-sky-100 text-sky-700 font-medium">#${t}</span>`
-                ).join('');
-
-                showToast('AI 智慧辨識完成！已自動填入物品特徵欄位', 'success');
+                badge.textContent = result.needs_review ? '辨識完成，請人工確認' : '辨識完成';
+                badge.className = 'px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700';
+                summary.textContent = '模型自評信心 ' + Math.round(result.confidence * 100) +
+                    '%。已填入可辨識的資訊，送出前請確認。' +
+                    (result.needs_review ? '此圖片需要人工檢查。' : '');
+                const tags = document.getElementById('ai-tags-preview');
+                tags.replaceChildren(...result.tags.map(tag => {
+                    const element = document.createElement('span');
+                    element.className = 'px-2 py-0.5 rounded-md bg-sky-100 text-sky-700';
+                    element.textContent = '#' + tag;
+                    return element;
+                }));
+                showToast('物品描述完成，請確認表單內容', 'success');
+            } catch (error) {
+                badge.textContent = '辨識失敗，可重試';
+                badge.className = 'px-2 py-0.5 rounded-full bg-rose-100 text-rose-700';
+                summary.textContent = error.message;
+                showToast(error.message, 'error');
             } finally {
                 overlay.classList.add('hidden');
+                button.disabled = false;
             }
         }
 
@@ -1208,6 +1236,7 @@
 
             // 重設表單與圖片預覽
             document.getElementById('report-form').reset();
+            document.querySelectorAll('#report-form [data-edited]').forEach(field => delete field.dataset.edited);
             appState.currentUploadedImage = '';
             appState.currentPresetType = null;
             document.getElementById('image-preview').classList.add('hidden');

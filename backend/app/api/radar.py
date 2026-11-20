@@ -16,6 +16,8 @@ from starlette.datastructures import UploadFile
 from ..core.db import engine, one, rows, query
 from ..services.media import bucket, storage, validate_image, embedding, get_photo
 
+from ..services.language_ai import classify_photo
+
 router = APIRouter(tags=["Radar"])
 
 
@@ -125,11 +127,7 @@ def create_report(data: Report):
 @router.post("/ai-recognize")
 def recognize(data: Recognition):
     photo, media_type = read_data_image(data.image)
-    try:
-        embedding(photo, media_type)
-    except (httpx.HTTPError, ValueError, TypeError) as exc:
-        raise HTTPException(503, "DINOv2 暫時無法使用，仍可手動填寫後登記") from exc
-    return {"embedding_ready": True, "message": "圖片特徵已擷取，名稱、類別、顏色與標籤請手動確認填寫。"}
+    return classify_photo(photo, media_type)
 
 
 def matches(connection):

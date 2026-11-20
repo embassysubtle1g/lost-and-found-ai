@@ -8,3 +8,5 @@
 - docs/frontend-reference.md 說明原稿介面與 API 差異。
 
 更新後先建置前端，再執行 Alembic 0004 遷移、重新啟動後端。詳見 [啟動方式](docs/backend.md)。
+
+物品描述服務位於 services/lost-and-found-language-ai，串接與啟動見 [語言 AI 整合](docs/language-ai.md)。
