@@ -29,3 +29,5 @@ weights/
 node_modules/
 dist/
 *.tsbuildinfo
+
+.runtime/

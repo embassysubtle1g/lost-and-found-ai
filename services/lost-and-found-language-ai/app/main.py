@@ -17,4 +17,6 @@ def health_check() -> dict[str, str]:
         "status": "ok",
         "service": settings.APP_NAME,
         "version": settings.APP_VERSION,
+        "backend": settings.MODEL_BACKEND,
+        "model": settings.OLLAMA_MODEL if settings.MODEL_BACKEND == "ollama" else settings.MODEL_NAME,
     }

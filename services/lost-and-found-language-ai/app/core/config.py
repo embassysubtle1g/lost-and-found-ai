@@ -7,6 +7,10 @@ class Settings:
 
     APP_VERSION = "0.1.0"
 
+    MODEL_BACKEND = os.getenv("MODEL_BACKEND", "transformers")
+    OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5vl:3b")
+
     # 語言模型名稱
     MODEL_NAME = os.getenv(
         "MODEL_NAME",

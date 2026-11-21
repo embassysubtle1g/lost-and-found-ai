@@ -38,6 +38,10 @@ class DinoV2Model:
     def load(self):
         """載入 DINOv2 模型"""
 
+        if self.device.startswith("cuda") and not torch.cuda.is_available():
+            raise RuntimeError(
+                "DINOv2 requires CUDA, but no GPU is available. Check Docker Desktop GPU access and NVIDIA driver."
+            )
         self.processor = AutoImageProcessor.from_pretrained(
             self.model_id
         )
@@ -54,7 +58,10 @@ class DinoV2Model:
         return {
             "model": self.model_name,
             "model_id": self.model_id,
-            "device": self.device,
+            "device": str(next(self.model.parameters()).device),
+            "gpu_name": torch.cuda.get_device_name() if self.device.startswith("cuda") else None,
+            "torch_version": str(torch.__version__),
+            "cuda_version": torch.version.cuda,
             "embedding_dimension": self.embedding_dimension,
             "status": "loaded",
         }

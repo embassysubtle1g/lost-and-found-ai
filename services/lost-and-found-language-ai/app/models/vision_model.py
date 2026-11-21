@@ -53,6 +53,9 @@ class VisionModelManager:
         self._model.eval()
 
     def generate(self, image: Any, prompt: str) -> str:
+        if settings.MODEL_BACKEND == "ollama":
+            from app.models.ollama_vision import generate
+            return generate(image, prompt)
         self.load()
 
         import torch

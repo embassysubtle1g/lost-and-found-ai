@@ -1,4 +1,19 @@
+> **Windows 雙擊啟動：** 在專案資料夾雙擊 `啟動尋物雷達.cmd`，會啟動服務並在就緒後自動開啟系統網頁。若啟動失敗，視窗會保留錯誤訊息。
+
+> **本機 Windows（16GB RAM / RTX 4060）請先讀 [本機安裝、啟動與驗證](docs/local-windows.md)。** 此配置使用 Ollama 的量化 Qwen2.5-VL，保留 DINOv2 的原有向量流程，避免同時載入未量化 CPU Qwen。根目錄 `Start-System.ps1` 提供整套啟動；以下原 Docker 語言模型流程保留作其他環境參考。
+
 # Lost-and-Found-System｜尋物雷達
+
+## 目前版本（2026-11-21）
+
+- 失物大廳加入最新版立體校園地圖，27 個可點選地點，支援時間熱點與案例篩選。
+- 通報單位與遺失／拾獲地點共用相同 27 個名稱、順序及 5 個分組。選擇通報單位後自動帶入電話；沒有專屬分機的地點會標示校方總機。
+- 地點與單位存在資料庫；通訊錄 138 筆歷史目錄保留，新選單只啟用與校園地點對應的 27 筆。電話來源版本與對應窗口保留於資料庫與文件。
+- 本機穩定配置使用 DINOv2 CPU 容器與 Ollama 量化 Qwen 視覺模型；本機已確認 Qwen 使用 RTX 4060，無須建置 CUDA 版 DINOv2。
+- 雙擊 `啟動尋物雷達.cmd` 可啟動服務，服務就緒後開啟網頁。首次下載仍須依下方步驟安裝依賴、建置前端與準備 CPU 映像及 Ollama 模型。
+- 資料庫遷移目前到 `0007`；更新既有環境請執行 `alembic upgrade head`。使用本機啟動檔時會自動執行遷移，並在辨識到舊後端時載入新 API。
+
+文件：[本機 Windows 啟動](docs/local-windows.md)、[校園地圖](docs/campus-map.md)、[通報單位與電話](docs/reporting-units.md)。
 
 尋物雷達是一套整合遺失／拾獲登記、圖片描述、圖片向量比對和媒合結案的失物招領系統。
 
@@ -35,7 +50,7 @@
 | 物品詳情 | 查看照片、描述、地點、時間和通報人，複製聯絡方式 | 前端詳細資料視窗 |
 | 管理 API | 保留機構分組、編輯、照片封面、刪除照片、下架及歸還等端點 | /api/v1/staff/*，免登入 |
 
-目前首頁採用提供的「遺失物.txt」完整畫面。登入流程與最早的綠色測試頁已移除。
+目前首頁以提供的「遺失物.txt」畫面為基礎，另整合最新版校園地圖及共同地點／單位選單。登入流程與最早的綠色測試頁已移除。
 
 ## 資料夾結構
 
@@ -47,6 +62,8 @@ Lost-and-Found-System/                   # 專案根目錄，GitHub repo 名稱�
 │   ├── app/
 │   │   ├── api/
 │   │   │   ├── radar.py                # 原稿介面的通報、描述、媒合、結案和照片 API
+│   │   │   ├── locations.py            # 校園地點目錄與舊地名對應
+│   │   │   ├── reporting_units.py      # 共用 27 個通報單位、電話與地點關聯
 │   │   │   └── items.py                # 公開查詢、機構分組、照片管理及歸還 API
 │   │   ├── core/
 │   │   │   ├── db.py                   # 載入 backend/.env，建立 PostgreSQL 連線
@@ -60,8 +77,10 @@ Lost-and-Found-System/                   # 專案根目錄，GitHub repo 名稱�
 │   │   │   │       │                   # 新增拾獲區域，支援舊資料
 │   │   │   │       ├── 0003_anonymous_management.py
 │   │   │   │       │                   # 允許免登入歸還並保留既有歷史
-│   │   │   │       └── 0004_radar_interface.py
-│   │   │   │                           # 新增 LOST/FOUND、原稿欄位及排除配對表
+│   │   │   │       ├── 0004_radar_interface.py  # LOST/FOUND、原稿欄位及排除配對表
+│   │   │   │       ├── 0005_campus_locations.py  # 校園地點及案例關聯
+│   │   │   │       ├── 0006_reporting_units.py   # 通訊錄歷史目錄
+│   │   │   │       └── 0007_campus_reporting_units.py # 兩欄共用 27 個地點
 │   │   │   └── …                       # 早期設定相容檔
 │   │   ├── models/
 │   │   │   └── items.py                # 拾獲物與照片資料查詢、機構歸屬查詢
@@ -110,13 +129,16 @@ Lost-and-Found-System/                   # 專案根目錄，GitHub repo 名稱�
 │       ├── app/
 │       │   ├── api/v1/images.py        # POST /api/v1/images/classify
 │       │   ├── core/config.py         # 模型名稱、裝置、量化和輸出長度
-│       │   ├── models/vision_model.py # 延遲載入 Qwen2.5-VL-3B-Instruct
+│       │   ├── models/vision_model.py # 選擇 Transformers 或本機 Ollama
+│       │   ├── models/ollama_vision.py # 量化視覺模型 HTTP 介接、併發與輸出檢查
 │       │   ├── schemas/image_classification.py
 │       │   │                          # 名稱、分類、屬性與人工確認回應格式
 │       │   ├── services/image_classification.py
 │       │   │                          # 驗圖、提示詞、模型輸出解析
 │       │   └── main.py                # 獨立 FastAPI 入口
-│       ├── Dockerfile                # CPU 容器與 8081 入口
+│       ├── run-local.ps1             # 使用後端虛擬環境執行 Ollama 描述 API
+│       ├── requirements-local.txt    # 輕量本機介接依賴
+│       ├── Dockerfile                # 原始 Transformers CPU 容器與 8081 入口
 │       ├── requirements.txt           # Qwen、PyTorch 和影像處理依賴
 │       └── README.md                  # 語言 AI 原始 API 規格
 ├── docs/                              # 跨系統說明
@@ -125,6 +147,8 @@ Lost-and-Found-System/                   # 專案根目錄，GitHub repo 名稱�
 │   ├── frontend-reference.md         # 原稿頁面與 Backend 對照
 │   ├── language-ai.md                # 物品描述 API、環境變數與部署
 │   └── validation.md                 # 測試與驗證限制
+├── Start-System.ps1                  # 本機服務、遷移、舊後端更新與瀏覽器啟動
+├── 啟動尋物雷達.cmd                  # Windows 雙擊入口
 ├── .gitignore                        # 忽略密碼設定、模型、套件和建置產物
 └── README.md                         # 本文件
 ```
@@ -160,6 +184,9 @@ backend/app/core/ 下保留的早期 Compose／Alembic 設定供舊版相容。�
 
 | 資料 | 儲存位置與用途 |
 | --- | --- |
+| campus_locations | 27 個校園地點、分區與 SVG 示意座標（非 GPS） |
+| reporting_units | 單位電話來源、歷史目錄、啟用狀態與校園地點關聯 |
+| items.campus_location_id、reporting_unit_id | 案例的地點及通報單位外鍵，既有文字資料保留 |
 | organizations | 機構／通報資料分組，以及名稱、地址和電話 |
 | items | 遺失與拾獲紀錄、狀態、時間、區域、描述等資料 |
 | items.record_type | LOST 或 FOUND |
@@ -264,7 +291,7 @@ Codespaces／Linux：
 python -m alembic upgrade head
 ```
 
-目前遷移依序為 0001 → 0002 → 0003 → 0004。既有環境也必須執行升級，讓資料表與程式一致。
+目前遷移依序為 0001 → 0002 → 0003 → 0004 → 0005 → 0006 → 0007。既有環境也必須執行升級，讓資料表與程式一致。
 
 ### 5. 建置前端
 
@@ -350,7 +377,7 @@ docker compose logs --tail=60 language-ai
 1. 開啟失物大廳，查看目前登記的遺失物與拾獲物。
 2. 點「登記通報」，選擇遺失或拾獲。
 3. 上傳照片，可點 AI 辨識自動填入名稱、分類、描述、顏色與標籤。
-4. 依提示核對內容，填寫地點、時間、通報人和聯絡方式。
+4. 依提示核對內容，選擇地點與通報單位，電話自動帶入，再填寫時間與其他資料。
 5. 送出通報，Backend 保存資料與照片，背景處理圖片向量。
 6. 進入 AI 智慧媒合中心，按重新比對取得背景處理完成後的候選。
 7. 聯絡雙方確認物品，實際交還後再確認媒合結案。
@@ -409,6 +436,8 @@ AI 容器程式更新時，對應服務需要重新 build。更新完成後，�
 | 方法／路徑 | 功能 |
 | --- | --- |
 | GET /health | Backend 健康回應 |
+| GET /api/locations | 27 個校園地點、分組、地圖示意座標與舊地名別稱 |
+| GET /api/reporting-units | 與校園地點一致的 27 個啟用通報單位及電話 |
 | GET /api/items | 原稿大廳通報清單 |
 | POST /api/items | 登記 LOST／FOUND，JSON 圖片為 data URL |
 | GET /api/images/{id} | 讀取通報照片，結案後仍可查看 |
@@ -506,10 +535,10 @@ Backend 終端機按 Ctrl+C 停止主系統。Docker 服務可在 backend 執行
 
 ## 驗證狀態與目前限制
 
-- 前端正式建置與 20 項後端測試已通過。
+- 前端正式建置、29 項主後端測試與 4 項 Ollama 介接測試已通過。
 - DINOv2 真實圖片已於 Codespaces 完成向量儲存與相同圖片媒合驗證。
-- Qwen 的 API 欄位、失敗處理與前端自動填寫已串接並通過模擬服務測試，真實推論仍待資源足夠的環境驗收。
-- CPU wheel Dockerfile 已提交，修改後的容器完整建置仍需在執行環境驗證。
+- Qwen 已透過本機 Ollama 實際回傳圖片名稱與描述，並確認量化模型載入 RTX 4060；首次測試約 54 秒，後續依模型是否仍載入而異。
+- DINOv2 CPU 容器已於本機完成建置、768 維向量、資料庫媒合與結案驗證。GPU 版建置已取消，目前沿用 CPU 配置。
 - 多角度、不同背景、相似物品的辨識品質與 60% 門檻，需要以測試集評估。
 - 候選圖片相似度與模型自評 confidence 各有不同用途，皆應搭配人工核對。
 - 圖片媒合與文字欄位描述已實作，獨立的自然語言語意搜尋 API 尚未提供。
@@ -519,6 +548,9 @@ Backend 終端機按 Ctrl+C 停止主系統。Docker 服務可在 backend 執行
 
 ## 其他文件
 
+- [本機 Windows 啟動](docs/local-windows.md)
+- [校園地圖](docs/campus-map.md)
+- [通報單位與電話](docs/reporting-units.md)
 - [Backend 安裝與更新](docs/backend.md)
 - [API 整合說明](docs/integration.md)
 - [原稿前端與資料流程](docs/frontend-reference.md)

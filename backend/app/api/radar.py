@@ -17,6 +17,8 @@ from ..core.db import engine, one, rows, query
 from ..services.media import bucket, storage, validate_image, embedding, get_photo
 
 from ..services.language_ai import classify_photo
+from .locations import resolve_location
+from .reporting_units import resolve_reporting_unit
 
 router = APIRouter(tags=["Radar"])
 
@@ -29,9 +31,11 @@ class Report(BaseModel):
     color: str = Field(default="", max_length=80)
     tags: list[str] = Field(default_factory=list, max_length=30)
     location: str = Field(min_length=1, max_length=120)
+    location_id: str | None = Field(default=None, max_length=40)
     location_detail: str = Field(default="", max_length=120)
     datetime: datetime
     description: str = Field(default="", max_length=2000)
+    reporting_unit_id: str | None = Field(default=None, max_length=40)
     user_name: str = Field(min_length=1, max_length=120)
     user_contact: str = Field(min_length=1, max_length=240)
     image_url: str = Field(default="", max_length=12_000_000)
@@ -63,11 +67,13 @@ def serialize(item):
         "item_id": item["reference"], "record_type": item["record_type"],
         "status": "OPEN" if item["status"] == "AVAILABLE" else "MATCHED",
         "title": item["name"], "category": item["category"],
-        "location": item["found_region"] or item["found_location"],
+        "location": item.get("campus_location_name") or item["found_region"] or item["found_location"],
+        "location_id": item.get("campus_location_id"),
         "location_detail": data.get("location_detail", item["found_location"]),
         "datetime": data.get("datetime", str(item["found_date"])).replace("T", " "),
         "color": data.get("color", ""), "tags": data.get("tags", []),
         "description": data.get("description", ""),
+        "reporting_unit_id": item.get("reporting_unit_id"),
         "user_name": data.get("user_name", item["organization_name"]),
         "user_contact": data.get("user_contact", item["organization_phone"]),
         "image_url": f"/api/images/{item['cover_id']}" if item["cover_id"] else "",
@@ -76,10 +82,11 @@ def serialize(item):
 
 
 SELECT = """
-    SELECT i.*, o.name AS organization_name, o.phone AS organization_phone,
+    SELECT i.*, c.name AS campus_location_name, o.name AS organization_name, o.phone AS organization_phone,
         (SELECT p.id FROM item_images p WHERE p.item_id = i.id AND p.is_cover
          AND p.removed_at IS NULL) AS cover_id
     FROM items i JOIN organizations o ON o.id = i.organization_id
+    LEFT JOIN campus_locations c ON c.id = i.campus_location_id
 """
 
 
@@ -91,6 +98,16 @@ def list_reports():
 
 @router.post("/items", status_code=201)
 def create_report(data: Report):
+    with engine.connect() as connection:
+        campus = resolve_location(connection, data.location_id, data.location)
+        unit = resolve_reporting_unit(connection, data.reporting_unit_id)
+    updates = {}
+    if campus:
+        updates.update(location_id=campus["id"], location=campus["name"])
+    if unit:
+        updates.update(reporting_unit_id=unit["id"], user_name=unit["name"], user_contact=unit["phone"])
+    if updates:
+        data = data.model_copy(update=updates)
     photo = read_data_image(data.image_url) if data.image_url else None
     key = "radar/" + uuid.uuid4().hex
     if photo:
@@ -108,13 +125,14 @@ def create_report(data: Report):
         """, name=data.user_name, address=data.location, phone=data.user_contact)
         item = one(connection, """
             INSERT INTO items(reference, organization_id, name, category, found_date,
-                found_location, found_region, record_type, radar_data)
+                found_location, found_region, record_type, radar_data, campus_location_id, reporting_unit_id)
             VALUES (:reference, :organization, :title, :category, :day, :place, :region,
-                :record_type, CAST(:payload AS jsonb)) RETURNING id
+                :record_type, CAST(:payload AS jsonb), :campus_location_id, :reporting_unit_id) RETURNING id
         """, reference=data.record_type + "-" + uuid.uuid4().hex[:16].upper(),
                    organization=organization.id, title=data.title, category=data.category,
                    day=data.datetime.date(), place=data.location_detail or data.location,
-                   region=data.location, record_type=data.record_type, payload=json.dumps(payload))
+                   region=data.location, record_type=data.record_type, payload=json.dumps(payload),
+                   campus_location_id=data.location_id, reporting_unit_id=data.reporting_unit_id)
         if photo:
             query(connection, """
                 INSERT INTO item_images(item_id, object_key, media_type, size_bytes, is_cover)

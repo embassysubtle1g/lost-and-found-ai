@@ -38,6 +38,7 @@ def home():
 def health():
     return {
         "status": "healthy",
+        "model_info": app.state.model_info,
     }
 
 
