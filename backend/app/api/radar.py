@@ -93,7 +93,22 @@ SELECT = """
 @router.get("/items")
 def list_reports():
     with engine.connect() as connection:
-        return [serialize(item) for item in rows(connection, SELECT + " ORDER BY i.id DESC")]
+        return [serialize(item) for item in rows(connection, SELECT + " WHERE i.status <> 'WITHDRAWN' ORDER BY i.id DESC")]
+
+
+@router.delete("/items/{reference}", status_code=204)
+def delete_report(reference: str):
+    # Downlisting retains photos/vectors; lock against concurrent match confirmation.
+    with engine.begin() as connection:
+        item = one(connection, "SELECT id, status FROM items WHERE reference = :reference FOR UPDATE",
+                   reference=reference)
+        if item is None:
+            raise HTTPException(404, "找不到案件")
+        if item["status"] == "RETURNED":
+            raise HTTPException(409, "已媒合結案的案件須保留歸還紀錄，無法刪除")
+        if item["status"] == "AVAILABLE":
+            query(connection, "UPDATE items SET status = 'WITHDRAWN' WHERE id = :id", id=item["id"])
+    return Response(status_code=204)
 
 
 @router.post("/items", status_code=201)
@@ -211,7 +226,7 @@ def list_matches():
 def pair_records(connection, data, lock=False):
     items = rows(connection, """
         SELECT id, reference, record_type, status FROM items
-        WHERE reference IN (:lost, :found) ORDER BY id
+        WHERE reference IN (:lost, :found) AND status <> 'WITHDRAWN' ORDER BY id
     """ + (" FOR UPDATE" if lock else ""), lost=data.lost_id, found=data.found_id)
     by_reference = {item["reference"]: item for item in items}
     lost, found = by_reference.get(data.lost_id), by_reference.get(data.found_id)
@@ -260,8 +275,9 @@ def reset_matches():
 def report_photo(image_id: int):
     with engine.connect() as connection:
         photo = one(connection, """
-            SELECT object_key, media_type FROM item_images
-            WHERE id = :id AND removed_at IS NULL
+            SELECT p.object_key, p.media_type FROM item_images p
+            JOIN items i ON i.id = p.item_id
+            WHERE p.id = :id AND p.removed_at IS NULL AND i.status <> 'WITHDRAWN'
         """, id=image_id)
     if photo is None:
         raise HTTPException(404, "找不到照片")

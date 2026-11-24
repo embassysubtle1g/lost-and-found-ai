@@ -82,6 +82,13 @@ if (Get-Health 'http://127.0.0.1:8000/health') {
             else { throw '地點或通報單位 API 目前無法使用，請查看後端記錄。' }
         }
     }
+    # Restart this project's old backend when the downlisting API has not been loaded.
+    $deleteSchemaClient = New-Object System.Net.WebClient
+    try {
+        $deleteSchemaClient.Encoding = [System.Text.Encoding]::UTF8
+        $deleteSchema = $deleteSchemaClient.DownloadString('http://127.0.0.1:8000/openapi.json') | ConvertFrom-Json
+    } finally { $deleteSchemaClient.Dispose() }
+    if (-not $deleteSchema.paths.'/api/items/{reference}'.delete) { $needsMapRestart = $true }
     if ($needsMapRestart) {
         # Windows PowerShell 5.1 may decode JSON without a charset using the wrong encoding.
         $schemaClient = New-Object System.Net.WebClient
@@ -97,7 +104,7 @@ if (Get-Health 'http://127.0.0.1:8000/health') {
         $loggedBackendPid = [int]$pidMatches[$pidMatches.Count - 1].Groups[1].Value
         $listeners = @(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction Stop)
         if ($loggedBackendPid -notin $listeners.OwningProcess) { throw '後端程序與本專案記錄不符，未停止任何程序。' }
-        Write-Host '正在重新啟動主後端以載入最新地點與通報單位 API…'
+        Write-Host '正在重新啟動主後端以載入最新案件、地點與通報單位 API…'
         Stop-Process -Id $loggedBackendPid -ErrorAction Stop
         for ($attempt = 0; $attempt -lt 10; $attempt++) {
             if (-not (Get-Health 'http://127.0.0.1:8000/health')) { break }

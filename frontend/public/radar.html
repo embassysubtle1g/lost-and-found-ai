@@ -555,9 +555,10 @@
     <!-- 彈窗 1：物品詳細資訊與聯絡視窗                             -->
     <!-- ========================================================= -->
     <div id="item-detail-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+        <div class="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
             <div class="relative h-60 bg-slate-100">
                 <img id="modal-img" src="" alt="物品照片" class="w-full h-full object-cover">
+
                 <button onclick="closeModal('item-detail-modal')" class="absolute top-3 right-3 w-9 h-9 rounded-full bg-slate-900/60 text-white hover:bg-slate-900 flex items-center justify-center transition">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
@@ -597,17 +598,19 @@
                     <p id="modal-desc" class="text-sm text-slate-700 leading-relaxed bg-slate-50 p-3 rounded-xl"></p>
                 </div>
 
-                <!-- 通報人資訊與複製聯絡方式 -->
+                <!-- 通報人資訊與案件刪除 -->
                 <div class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                         <span class="text-xs text-slate-400 block">通報人資訊 (Users)</span>
                         <span id="modal-user" class="text-sm font-semibold text-slate-800"></span>
                     </div>
-                    <button id="modal-copy-btn" onclick="copyContactInfo()" class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium flex items-center justify-center gap-2 transition">
-                        <i data-lucide="copy" class="w-4 h-4"></i>
-                        複製聯絡方式
+                <div id="modal-delete-section" class="shrink-0">
+                    <button id="modal-delete-btn" type="button" onclick="deleteActiveItem()" title="刪除後案件將從大廳、地圖及媒合建議下架" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-lg text-sm font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50 disabled:cursor-wait">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i> 刪除案件
                     </button>
                 </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -956,7 +959,7 @@
             selectedMapLocation: 'ALL',
             currentUploadedImage: '',
             currentPresetType: null,
-            activeContactText: ''
+            activeItemId: null
         };
 
         /**
@@ -1673,6 +1676,8 @@
             const item = appState.items.find(i => i.item_id === itemId);
             if (!item) return;
 
+            appState.activeItemId = itemId;
+            document.getElementById('modal-delete-section').classList.toggle('hidden', item.status === 'MATCHED');
             document.getElementById('modal-img').src = item.image_url;
             document.getElementById('modal-category').textContent = item.category;
             document.getElementById('modal-id').textContent = `ID: ${item.item_id}`;
@@ -1682,7 +1687,6 @@
             document.getElementById('modal-desc').textContent = item.description || '無額外補充說明';
             document.getElementById('modal-user').textContent = `${item.user_name} (${item.user_contact})`;
 
-            appState.activeContactText = `${item.user_name} - ${item.user_contact}`;
 
             const badgeContainer = document.getElementById('modal-badge-container');
             if (item.status === 'MATCHED') {
@@ -1702,14 +1706,39 @@
             lucide.createIcons();
         }
 
-        function copyContactInfo() {
-            const tempInput = document.createElement('input');
-            tempInput.value = appState.activeContactText;
-            document.body.appendChild(tempInput);
-            tempInput.select();
-            document.execCommand('copy');
-            document.body.removeChild(tempInput);
-            showToast(`已複製聯絡資訊：${appState.activeContactText}`, 'success');
+        async function deleteActiveItem() {
+            const button = document.getElementById('modal-delete-btn');
+            if (button.disabled) return;
+            const item = appState.items.find(entry => entry.item_id === appState.activeItemId);
+            if (!item || item.status === 'MATCHED') return;
+            if (!window.confirm(`確定刪除「${item.title}」這筆案件嗎？\n案件將從大廳、地圖及媒合建議下架，原始紀錄仍保留。`)) return;
+            button.disabled = true;
+            button.textContent = '刪除中…';
+            try {
+                await backendRequest('/items/' + encodeURIComponent(item.item_id), 'DELETE');
+                closeModal('item-detail-modal');
+                appState.activeItemId = null;
+                // Hide immediately even if the following server refresh fails.
+                appState.items = appState.items.filter(entry => entry.item_id !== item.item_id);
+                appState.matches = appState.matches.filter(match =>
+                    match.lost_item.item_id !== item.item_id && match.found_item.item_id !== item.item_id);
+                updateStatistics();
+                renderItemsGrid();
+                renderHotspotMapAndPills();
+                renderMatchesList();
+                try {
+                    await refreshAllData();
+                    showToast('案件已刪除下架。', 'success');
+                } catch (error) {
+                    showToast('案件已下架，但重新整理失敗，請稍後重新整理網頁。', 'warning');
+                }
+            } catch (error) {
+                showToast(error.message || '刪除失敗，請稍後再試。', 'warning');
+            } finally {
+                button.disabled = false;
+                button.innerHTML = '<i data-lucide="trash-2" class="w-4 h-4"></i> 刪除案件';
+                lucide.createIcons();
+            }
         }
 
         function openApiModal() {
